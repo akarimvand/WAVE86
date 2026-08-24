@@ -184,3 +184,26 @@
   limit: 52428800,
   type: 'entity.too.large'
 }
+node:internal/fs/watchers:321
+    const error = new UVException({
+                  ^
+
+Error: EBUSY: resource busy or locked, watch 'C:\xampp\htdocs\WAVE86\WAVE86.zip'
+    at FSWatcher.<computed> (node:internal/fs/watchers:321:19)
+    at Object.watch (node:fs:2548:36)
+    at createFsWatchInstance (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22195:17)
+    at setFsWatchListener (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22242:15)
+    at NodeFsHandler._watchWithNodeFs (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22397:14)
+    at NodeFsHandler._handleFile (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22461:23)
+    at NodeFsHandler._addToNodeFs (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22703:21)
+Emitted 'error' event on FSWatcher instance at:
+    at FSWatcher._handleError (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:23896:10)
+    at NodeFsHandler._addToNodeFs (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22711:18) {
+  errno: -4082,
+  syscall: 'watch',
+  code: 'EBUSY',
+  path: 'C:\\xampp\\htdocs\\WAVE86\\WAVE86.zip',
+  filename: 'C:\\xampp\\htdocs\\WAVE86\\WAVE86.zip'
+}
+
+Node.js v24.16.0
