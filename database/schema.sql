@@ -1,16 +1,23 @@
 -- ============================================================================
 -- WAVE86 / باشگاه سنگ‌نوردی موج — اسکیمای کامل و تمیز دیتابیس MySQL
 -- ----------------------------------------------------------------------------
--- نسخه: 3.0 (تحت‌الاصلاح 2026-08-24)
--- این فایل تنها Source of Truth برای نصب تمیز است و «همه تغییرات جدید»
--- پروژه اصلاحات در آن اعمال شده است:
+-- نسخه: 3.2 (تحت‌الاصلاح 2026-08-24)
+-- ★ این فایل تنها Source of Truth نصب تمیز است؛ Migration 005 به‌طور کامل
+--   در بخش انتهایی همین فایل ادغام شده است (database/migrations خالی می‌تواند باشد).
+--
+-- تاریخچه تغییرات نسبت به v3.0:
 --   ✔ ستون Optimistic Locking: version INT روی ۸ جدول حساس
---   ✔ پول مالی: DECIMAL(18,2) به جای DOUBLE (۱۰ ستون)
+--   ✔ پول مالی: DECIMAL(18,2) — از v3.2 شامل courses.monthlyFee هم هست
 --   ✔ تراکنش مالی: idempotencyKey UNIQUE + voidedAt/voidedBy/voidReason
 --   ✔ Audit Trail غنی: oldValue/newValue/ip/userAgent
 --   ✔ users.mustChangePassword (اجبار تغییر رمز اولین ورود)
---   ✔ یک کاربر اولیه: admin / 123  (پسورد خام؛ در اولین ورود موفق
---     بهصورت خودکار به bcrypt ارتقا مییابد — auth.routes.ts)
+--   ✔ یک کاربر اولیه: admin / 123  (پسورد به‌صورت bcrypt hash ذخیره میشود)
+--
+-- تغییرات v3.2 (ادغام و پاکسازی):
+--   ✔ ادغام کامل محتوای migrations/005_foreign_keys_indexes.sql در همین فایل
+--   ✔ حذف ALTERهای ایندکسِ تکراری (idx_audit_timestamp، idx_sms_sentat که در
+--     CREATE TABLE از قبل تعریف شده بودند و باعث ER_DUP_KEYNAME میشدند)
+--   ✔ حذف FK تکراری shop_invoice_items (inline کافی است؛ ALTER دوم حذف شد)
 --
 -- ⚠️ اجرای این فایل، جداول هم‌نام موجود را DROP میکند! فقط برای نصب تمیز.
 -- ⚠️ برای سرورهای قدیمی‌تر (قبل از 2026-08): بخش «UPGRADE FROM LEGACY»
@@ -208,7 +215,7 @@ CREATE TABLE `courses` (
   `startTime` VARCHAR(50),
   `endTime` VARCHAR(50),
   `capacity` INT DEFAULT 20,
-  `monthlyFee` DOUBLE,
+  `monthlyFee` DECIMAL(18,2) DEFAULT 0,
   `sessionsLimit` INT DEFAULT 12,
   `isActive` TINYINT(1) DEFAULT 1,
   `description` TEXT,
@@ -481,8 +488,7 @@ INSERT IGNORE INTO `roles` (`id`, `key_name`, `title`, `description`, `isSystem`
 -- ----------------------------------------------------------------------------
 -- کاربر اولیه: admin / 123
 -- ⚠️ BOOTSTRAP-ONLY:
---    ۱) این پسورد «عمداً» خام است؛ سرور در اولین ورود موفق آن را به‌صورت
---       خودکار به bcrypt hash ارتقا میدهد (auth.routes.ts → Auto-upgrade).
+--    ۱) پسورد '123' به‌صورت bcrypt (cost=10) ذخیره شده است.
 --    ۲) پرچم mustChangePassword = 1 است تا تغییر رمز در نخستین ورود الزامی شود.
 --    ۳) بلافاصله پس از نصب Production، رمز را عوض کنید.
 -- ----------------------------------------------------------------------------
@@ -492,7 +498,7 @@ INSERT INTO `users` (
 ) VALUES (
   'usr-admin-1',
   'admin',
-  '123',
+  '$2b$10$8wVeG1mVI7Al4IFX9swqgeEBmeCvaqgPdIklqsFqjV6hGd3.OuKpi',
   'مدیر کل مجموعه',
   '0012345678',
   '09121111111',
@@ -567,8 +573,6 @@ ALTER TABLE `transactions`
   ADD CONSTRAINT `fk_transactions_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE `debtors`
   ADD CONSTRAINT `fk_debtors_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE `shop_invoice_items`
-  ADD CONSTRAINT `fk_items_invoice` FOREIGN KEY (`invoiceId`) REFERENCES `shop_invoices`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `parent_athlete_links`
   ADD CONSTRAINT `fk_links_parent` FOREIGN KEY (`parentId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `parent_athlete_links`
@@ -578,7 +582,6 @@ ALTER TABLE `insurance_requests`
 ALTER TABLE `app_notifications`
   ADD CONSTRAINT `fk_notifications_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE `audit_logs`          ADD INDEX `idx_audit_timestamp` (`timestamp`);
 ALTER TABLE `audit_logs`          ADD INDEX `idx_audit_userid` (`userId`);
 ALTER TABLE `transactions`        ADD INDEX `idx_tx_createdat` (`createdAt`);
 ALTER TABLE `transactions`        ADD INDEX `idx_tx_status` (`status`);
@@ -586,7 +589,6 @@ ALTER TABLE `transactions`        ADD INDEX `idx_tx_userid` (`userId`);
 ALTER TABLE `enrollments`         ADD INDEX `idx_enr_session` (`sessionId`);
 ALTER TABLE `enrollments`         ADD INDEX `idx_enr_user_status` (`userId`, `status`);
 ALTER TABLE `app_notifications`   ADD INDEX `idx_notif_user_read` (`userId`, `isRead`);
-ALTER TABLE `sms_logs`            ADD INDEX `idx_sms_sentat` (`sentAt`);
 ALTER TABLE `attendance_records`  ADD INDEX `idx_att_session_date` (`sessionId`, `date`);
 ALTER TABLE `attendance_records`  ADD INDEX `idx_att_userid` (`userId`);
 ALTER TABLE `shop_invoices`       ADD INDEX `idx_inv_createdat` (`createdAt`);

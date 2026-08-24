@@ -2,16 +2,15 @@
 > wave69-club-management@0.0.0 dev
 > tsx server.ts
 
-[Server] Climbing Club Backend running at http://0.0.0.0:3000 (warming up...)
+[Security] JWT_SECRET environment variable is NOT set. Using an ephemeral random secret — sessions will NOT survive restarts. Set JWT_SECRET in production!
+[31mWebSocket server error: Port 24678 is already in use[39m
+[Server] uncaughtException (kept alive): listen EADDRINUSE: address already in use 0.0.0.0:3000
 [Database] Running self-healing schema compatibility checks...
+[Self-Healing] Adding column 'logo_icon' to table 'club_settings'
+[Self-Healing] Adding column 'theme_palette' to table 'club_settings'
+[Self-Healing] Adding column 'category' to table 'support_tickets'
 [Database] Self-healing checks finished successfully.
 [Server] MySQL schema checked and verified successfully.
-[Server] Migrations applied=0 skipped=1
-[BackupScheduler] Active — interval 24h, local=C:\xampp\htdocs\WAVE86\backups\auto, remote=NOT CONFIGURED (set BACKUP_REMOTE_DIR)
-[BackupScheduler] Backup created: moj_auto_daily_2026-08-24T13-09-26.json (208.3 KB) local
-[EnrollmentDelete] START id=enr-1787577000002-lw7r mode=HARD by=admin
-[EnrollmentDelete] DONE hard id=enr-1787577000002-lw7r (row + attendance + pending debts cascaded) by=admin
-[EnrollmentDelete] START id=enr-1787577000021-82hc mode=HARD by=admin
-[EnrollmentDelete] DONE hard id=enr-1787577000021-82hc (row + attendance + pending debts cascaded) by=admin
-[EnrollmentDelete] START id=enr-1787576999988-gm07 mode=HARD by=admin
-[EnrollmentDelete] DONE hard id=enr-1787576999988-gm07 (row + attendance + pending debts cascaded) by=admin
+[Migration] FAILED 005_foreign_keys_indexes.sql: Can't create table `qdexnhxv_mouj`.`enrollments` (errno: 121 "Duplicate key on write or update")
+[Server] Bootstrap warning: Migration 005_foreign_keys_indexes.sql failed: Can't create table `qdexnhxv_mouj`.`enrollments` (errno: 121 "Duplicate key on write or update")
+^C^C
