@@ -91,6 +91,31 @@ router.post('/transactions', ...financeGuard, validateRequestBody(['amount', 'ty
           });
         }
       }
+      // Legacy database without the idempotencyKey column (pre-Migration 002):
+      // degrade gracefully instead of failing the payment.
+      if (err?.code === 'ER_BAD_FIELD_ERROR') {
+        await pool.query(
+          `INSERT INTO transactions (id, userId, userName, userNationalId, amount, type, method, trackingNumber, receiptUrl, receiptFileName, description, status, createdAt, createdBy)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            t.userId,
+            t.userName || '',
+            t.userNationalId || '',
+            Number(t.amount) || 0,
+            t.type,
+            t.method || 'cash',
+            t.trackingNumber || '',
+            t.receiptUrl || '',
+            t.receiptFileName || '',
+            t.description || '',
+            t.status || 'completed',
+            t.createdAt || new Date().toISOString(),
+            t.createdBy || 'مدیر سیستم',
+          ]
+        );
+        return res.status(201).json({ success: true, message: 'تراکنش ثبت شد (حالت سازگاری).', id });
+      }
       throw err;
     }
 

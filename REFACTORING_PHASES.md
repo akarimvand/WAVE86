@@ -3,7 +3,7 @@
 > **این فایل زنده است.** هر مورد که کامل شود با `[x]` تیک میخورد.
 > گزارش کامل یافتهها: [`AUDIT.md`](./AUDIT.md)
 > رویه پشتیبانگیری و بازیابی: [`BACKUP_RECOVERY.md`](./BACKUP_RECOVERY.md)
-> آخرین بهروزرسانی: 2026-08-24 — نسخه ۳
+> آخرین بهروزرسانی: 2026-08-24 — نسخه ۴
 
 ---
 
@@ -77,13 +77,15 @@
 # 🔧 لیست ۲ — فازهای در جریان و باقیمانده
 
 ## Phase 1 — Database Integrity (در جریان)
-- [x] Migration System
-- [x] Version Columns (Migration 001)
-- [x] Money DECIMAL(18,2) (Migration 003)
+- [x] Migration System — رانر سرور فعال ماند؛ **پوشه `database/migrations` طبق تصمیم «دیتابیس تمیز» حذف و محتوایش در `database/schema.sql` (بخش UPGRADE FROM LEGACY) ادغام شد**
+- [x] Version Columns (Migration 001 ⇒ اکنون داخل schema.sql v3 + self-healing runtime)
+- [x] Money DECIMAL(18,2) (Migration 003 ⇒ اکنون داخل schema.sql v3)
+- [x] **پوشه `database` کاملاً خالی و تنها با یک فایل واحد**: `database/schema.sql` v3 — شامل هر ۲۰ جدول + همه ستونهای جدید + Seed نقش‌ها + کاربر اولیه `admin/123` (+ بخش UPGRADE FROM LEGACY برای سرورهای قدیمی)
+- [x] Self-healing runtime (`mysql.ts`): ensureCol ستونهای version/idempotencyKey/voided*/audit-enrichment/mustChangePassword — نصب runtime همیشه با schema.sql همتراز میشود
+- [x] مقاومسازی `POST /api/finance/transactions` برای DBهای قدیمی بدون ستون idempotencyKey (fallback خودکار، پرداخت نمیشکند)
 - [ ] اسکن Orphan Records روی دیتابیس زنده (نیازمند MySQL در دسترس)
 - [ ] افزودن FK واقعی بین users/enrollments/transactions/attendance/sessions/products
 - [ ] بازبینی و افزودن Indexهای لازم بر اساس کوئریهای پرتکرار
-- [ ] هماهنگسازی `database/schema.sql` با runtime schema (حذف دوگانگی Source of Truth)
 
 ## Phase 2 — Persistence (ادامه)
 - [x] Transactions اتمیک در مسیر sync
@@ -92,7 +94,6 @@
 - [ ] یکسانسازی الگوی خطاها (400 Validation / 401 AuthN / 403 AuthZ / 409 Conflict / 500 Server) در همه routeها
 - [x] حذف `multipleStatements: true` از پول mysql.ts — سطح حمله stacked-query SQL-injection بسته شد (M2 رفع؛ رانر Migration خودش statementها را جدا اجرا میکند)
 - [x] Graceful shutdown: `closeMySqlPool()` + server.close روی SIGTERM/SIGINT با safety-net timeout
-- [ ] بازبینی `multipleStatements: true` در پول `server/mysql.ts`
 
 ## Phase 3 — Concurrency (ادامه - پوشش کامل)
 - [x] Version + 409 روی users (REST)
@@ -158,12 +159,6 @@
 | Phase 6 — Backup & Recovery | 🔶 پیادهسازی کامل | ~85% |
 | Phase 7 — Testing | ⬜ نیازمند محیط اجرا | 0% |
 
-### فایلهای جدید این دور (Phase 5 ادامه)
-| فایل | نقش |
-|---|---|
-| `server/audit.ts` | ماژول Audit Trail مرکزی (writeAudit + getRequestInfo + fallback) |
-| `database/migrations/004_audit_enrichment_and_must_change_password.sql` | ستونهای oldValue/newValue/ip/userAgent + mustChangePassword |
-
 > **یادداشت:** موارد «زیرساخت آماده ✓» در Phase 7 یعنی کد سمت سرور/کلاینت پیاده شده اما اجرای واقعی تست نیازمند نصب وابستگیها (`npm install`) و MySQL فعال است.
 
 ---
@@ -177,9 +172,8 @@
 | `REFACTORING_PHASES.md` | همین سند ردیابی |
 | `BACKUP_RECOVERY.md` | RPO/RTO، Retention، رویه Restore، چکلیست تأیید |
 | `server/migrations.ts` | رانر Migration (idempotent + schema_migrations) |
-| `database/migrations/001_add_version_columns.sql` | ستون version برای ۸ جدول |
-| `database/migrations/002_add_transaction_integrity.sql` | idempotencyKey UNIQUE + soft-void columns |
-| `database/migrations/003_convert_money_to_decimal.sql` | DECIMAL(18,2) برای ۱۰ ستون مالی |
+| `database/schema.sql` | **اسکیمای واحد v3** — هر ۲۰ جدول با تمام تغییرات (version، DECIMAL، idempotencyKey، soft-void، audit enrichment، mustChangePassword) + Seed نقش‌ها + کاربر `admin/123` + بخش UPGRADE FROM LEGACY |
+| `server/audit.ts` | ماژول مرکزی Audit Trail (writeAudit + getRequestInfo + fallback برای DBهای pre-migration) |
 | `server/backupScheduler.ts` | Backup خودکار + Retention + مقصد دوم |
 
 ### فایلهای ویرایششده (سرور)
@@ -187,20 +181,20 @@
 |---|---|
 | `server.ts` | اتصال runMigrations + startBackupScheduler + Graceful Shutdown |
 | `server/db.ts` | حذف credential هاردکد؛ `closeMySqlPool()`؛ withTransaction موجود |
-| `server/mysql.ts` | حذف credential هاردکد؛ seed ادمین با bcrypt hash |
+| `server/mysql.ts` | حذف credential هاردکد؛ seed ادمین با bcrypt hash + mustChangePassword=1 دفاعی؛ **حذف multipleStatements** (بستن stacked-query injection) |
 | `server/middleware.ts` | JWT_SECRET env-الزامی + ephemeral fallback |
-| `server/repository.ts` | `updateUserVersioned()` + `userExists()` + password-guard |
-| `server/routes/auth.routes.ts` | حذف FileStore fallback؛ خطای 503 شفاف MySQL |
-| `server/routes/users.routes.ts` | حذف FileStore؛ authenticateJwt در PUT/PATCH؛ Optimistic Locking + 409 |
+| `server/repository.ts` | `updateUserVersioned()` + `userExists()` + password-guard (`IF(?='',password,?)`) |
+| `server/routes/auth.routes.ts` | حذف FileStore fallback؛ خطای 503 شفاف MySQL؛ reset mustChangePassword پس از change-password موفق |
+| `server/routes/users.routes.ts` | حذف FileStore؛ authenticateJwt در PUT/PATCH؛ Optimistic Locking + 409؛ Pagination/Search/Filter روی GET؛ Audit Trail (حذف/ویرایش/تغییر نقش با old/new/ip/agent) |
 | `server/routes/products.routes.ts` | حذف fallback FileStore/DEMO از GET؛ MySQL-only |
-| `server/routes/courses.routes.ts` | حذف FileStore؛ +POST enrollments (FOR UPDATE)؛ +DELETE soft-cancel؛ +POST attendance/batch |
-| `server/routes/finance.routes.ts` | حذف FileStore و موفقیت جعلی؛ Idempotency تراکنش؛ Soft-Void؛ +POST invoices اتمیک |
-| `server/routes/sync.routes.ts` | sync اتمیک بدون FK_CHECKS=0؛ full-data با PII Filter؛ حذف fallback |
+| `server/routes/courses.routes.ts` | حذف FileStore؛ +POST enrollments (FOR UPDATE)؛ +DELETE soft-cancel؛ +POST attendance/batch (**idempotent lookup-upsert**)؛ Audit ثبتنام/لغو |
+| `server/routes/finance.routes.ts` | حذف FileStore و موفقیت جعلی؛ Idempotency تراکنش؛ Soft-Void؛ +POST invoices اتمیک؛ Audit ابطال/فاکتور |
+| `server/routes/sync.routes.ts` | sync اتمیک بدون FK_CHECKS=0؛ full-data با PII Filter + cap ۵۰۰ روی لاگها؛ حذف fallback |
 
 ### فایلهای ویرایششده (Frontend)
 | فایل | خلاصه تغییرات |
 |---|---|
-| `src/services/db.ts` | pendingLocalMutations + mergePendingLocal (۱۴ کالکشن)؛ حذف clearInMemoryData در خطا؛ server-first createShopInvoice؛ REST مستقل transaction/enrollment/attendance؛ version sync + handle 409؛ soft-void محلی deleteTransaction؛ Double-click Guard |
+| `src/services/db.ts` | pendingLocalMutations + mergePendingLocal (۱۴ کالکشن)؛ حذف clearInMemoryData در خطا؛ server-first createShopInvoice؛ REST مستقل transaction/enrollment/attendance؛ **ارسال id حضورغیاب برای upsert بدون duplicate**؛ version sync + handle 409؛ soft-void محلی deleteTransaction؛ Double-click Guard |
 | `src/components/ShopExpensesView.tsx` | await کردن createShopInvoice |
 | `src/App.tsx` | (بدون تغییر در این مراحل — sessionStorage فقط session auth نگه میدارد) |
 

@@ -852,6 +852,23 @@ export async function initializeTables(pool: mysql.Pool) {
     await ensureCol('shop_invoice_items', col, def);
   }
 
+  // 9. Phase-3/5 integrity columns — keeps runtime-created tables aligned with
+  //    database/schema.sql v3 (version locking, idempotency, soft-void, audit
+  //    enrichment, must-change-password). Safe no-ops when columns already exist.
+  await ensureCol('users', 'version', "INT NOT NULL DEFAULT 1");
+  await ensureCol('users', 'mustChangePassword', "TINYINT(1) NOT NULL DEFAULT 0");
+  for (const t of ['enrollments', 'transactions', 'attendance_records', 'courses', 'products', 'debtors', 'creditors']) {
+    await ensureCol(t, 'version', "INT NOT NULL DEFAULT 1");
+  }
+  await ensureCol('transactions', 'idempotencyKey', "VARCHAR(100) NULL");
+  await ensureCol('transactions', 'voidedAt', "VARCHAR(100) NULL");
+  await ensureCol('transactions', 'voidedBy', "VARCHAR(255) NULL");
+  await ensureCol('transactions', 'voidReason', "TEXT NULL");
+  await ensureCol('audit_logs', 'oldValue', "LONGTEXT NULL");
+  await ensureCol('audit_logs', 'newValue', "LONGTEXT NULL");
+  await ensureCol('audit_logs', 'ip', "VARCHAR(64) NULL");
+  await ensureCol('audit_logs', 'userAgent', "VARCHAR(255) NULL");
+
   console.log('[Database] Self-healing checks finished successfully.');
 }
 
