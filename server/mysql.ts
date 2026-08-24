@@ -100,7 +100,9 @@ export function getMySqlPool(customConfig?: DbConfig): mysql.Pool {
       connectTimeout: 10000,
       enableKeepAlive: true,
       keepAliveInitialDelay: 5000,
-      multipleStatements: true,
+      // multipleStatements intentionally DISABLED (security): closes the
+      // stacked-query SQL-injection surface. The migration runner splits
+      // .sql files into single statements itself (server/migrations.ts).
     });
   }
   return pool;
@@ -881,6 +883,14 @@ export async function seedInitialAdmin(pool: mysql.Pool) {
       '1403/01/01',
     ]
   );
+
+  // Force password change on first login (column exists after Migration 004;
+  // wrapped defensively so fresh installs before migration are unaffected).
+  try {
+    await pool.query("UPDATE users SET mustChangePassword = 1 WHERE id = 'usr-admin-1'");
+  } catch {
+    // ignore pre-migration databases
+  }
 }
 
 export async function seedDemoData(pool: mysql.Pool) {

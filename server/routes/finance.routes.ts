@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getMySqlPool, withTransaction } from '../db';
 import { SyncRepository } from '../repository';
+import { writeAudit, getRequestInfo } from '../audit';
 import { validateRequestBody, authenticateJwt, requireRoles, AuthenticatedRequest } from '../middleware';
 
 const router = Router();
@@ -110,12 +111,27 @@ router.delete('/transactions/:id', ...financeGuard, async (req: AuthenticatedReq
     const actor = req.user?.username || req.user?.fullName || req.user?.id || 'سیستم';
     const voidReason = req.body?.voidReason || `باطل‌سازی توسط ${actor}`;
 
+    const [oldRows]: any = await pool.query('SELECT * FROM transactions WHERE id = ?', [req.params.id]);
+
     await pool.query(
       `UPDATE transactions
          SET status='cancelled', voidedAt=?, voidedBy=?, voidReason=?
        WHERE id = ? AND status != 'cancelled'`,
       [new Date().toISOString(), actor, voidReason, req.params.id]
     );
+
+    // Server-side audit trail for financial voids (Phase 5)
+    await writeAudit(pool, {
+      userId: req.user?.id,
+      userName: actor,
+      action: 'ابطال تراکنش مالی',
+      entity: 'FinancialTransaction',
+      entityId: req.params.id,
+      details: voidReason,
+      oldValue: oldRows?.[0] || undefined,
+      newValue: { status: 'cancelled', voidedBy: actor },
+      ...getRequestInfo(req),
+    });
 
     res.json({ success: true, message: 'تراکنش با موفقیت باطل شد.' });
   } catch (err: any) {
@@ -322,6 +338,18 @@ router.post('/invoices', ...financeGuard, async (req: AuthenticatedRequest, res,
       }
 
       return newInvoice;
+    });
+
+    // Server-side audit trail (Phase 5)
+    await writeAudit(pool, {
+      userId: req.user?.id,
+      userName: actor,
+      action: 'ثبت فاکتور فروشگاه',
+      entity: 'ShopInvoice',
+      entityId: invoice.id,
+      details: `فاکتور ${invoice.invoiceNumber} به مبلغ ${Number(invoice.totalAmount).toLocaleString('fa-IR')} تومان برای ${invoice.athleteName} (${invoice.items.length} قلم، ${invoice.paymentMethod})`,
+      newValue: { totalAmount: invoice.totalAmount, itemsCount: invoice.items.length, paymentMethod: invoice.paymentMethod },
+      ...getRequestInfo(req),
     });
 
     res.status(201).json({ success: true, message: 'فاکتور با موفقیت ثبت شد.', invoice });

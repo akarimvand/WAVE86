@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getMySqlPool, withTransaction } from '../db';
 import { SyncRepository } from '../repository';
+import { writeAudit, getRequestInfo } from '../audit';
 import { validateRequestBody, authenticateJwt, requireRoles } from '../middleware';
 
 const router = Router();
@@ -194,6 +195,18 @@ router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin
       return enr;
     });
 
+    // Server-side audit trail (Phase 5)
+    await writeAudit(pool, {
+      userId: req.user?.id,
+      userName: req.user?.username || req.user?.fullName,
+      action: 'ثبت‌نام سانس',
+      entity: 'Enrollment',
+      entityId: enrollment.id,
+      details: `ثبت‌نام ${enrollment.athleteName} در سانس ${sessionId}`,
+      newValue: { sessionId, userId, status: enrollment.status },
+      ...getRequestInfo(req),
+    });
+
     res.status(201).json({ success: true, message: 'ثبت‌نام با موفقیت انجام شد.', enrollment });
   } catch (err: any) {
     if (err.status) {
@@ -206,13 +219,25 @@ router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin
 /**
  * DELETE /api/courses/enrollments/:id  — soft cancel (never hard delete)
  */
-router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req, res, next) => {
+router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req: any, res, next) => {
   try {
     const pool = getMySqlPool();
     await pool.query(
       "UPDATE enrollments SET status = 'canceled', updatedAt = ? WHERE id = ? AND status != 'canceled'",
       [new Date().toISOString(), req.params.id]
     );
+
+    await writeAudit(pool, {
+      userId: req.user?.id,
+      userName: req.user?.username || req.user?.fullName,
+      action: 'لغو ثبت‌نام سانس',
+      entity: 'Enrollment',
+      entityId: req.params.id,
+      details: 'لغو ثبت‌نام توسط مدیریت',
+      newValue: { status: 'canceled' },
+      ...getRequestInfo(req),
+    });
+
     res.json({ success: true, message: 'ثبت‌نام با موفقیت لغو شد.' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: `خطا در لغو ثبت‌نام: ${err.message || err}` });
@@ -231,22 +256,38 @@ router.post('/attendance/batch', authenticateJwt, requireRoles(['super_admin', '
     }
 
     const actor = req.user?.username || req.user?.fullName || 'سیستم';
-
-    const prepared = records.map((rec: any, i: number) => ({
-      id: rec.id || `att-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
-      sessionId,
-      date,
-      userId: rec.userId,
-      userName: rec.userName || '',
-      status: rec.status,
-      reason: rec.reason || '',
-      checkInTime: rec.checkInTime || '',
-      checkOutTime: rec.checkOutTime || '',
-      recordedBy: actor,
-      recordedAt: rec.recordedAt || new Date().toISOString(),
-    }));
-
+    const nowIso = new Date().toISOString();
     const pool = getMySqlPool();
+
+    // Idempotent upsert (Phase 3): resolve the EXISTING record id per
+    // (sessionId, date, userId). Retrying a save — or saving twice — UPDATES
+    // the same row instead of creating duplicates.
+    const prepared: any[] = [];
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+      let recordId = rec.id;
+      if (!recordId) {
+        const [exRows]: any = await pool.query(
+          'SELECT id FROM attendance_records WHERE sessionId = ? AND date = ? AND userId = ? LIMIT 1',
+          [sessionId, date, rec.userId]
+        );
+        recordId = exRows?.[0]?.id || `att-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`;
+      }
+      prepared.push({
+        id: recordId,
+        sessionId,
+        date,
+        userId: rec.userId,
+        userName: rec.userName || '',
+        status: rec.status,
+        reason: rec.reason || '',
+        checkInTime: rec.checkInTime || '',
+        checkOutTime: rec.checkOutTime || '',
+        recordedBy: actor,
+        recordedAt: rec.recordedAt || nowIso,
+      });
+    }
+
     await withTransaction(pool, async (conn) => {
       await SyncRepository.syncAttendanceRecords(conn, prepared);
     });

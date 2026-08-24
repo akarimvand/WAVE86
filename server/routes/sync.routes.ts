@@ -356,10 +356,12 @@ router.get('/full-data', optionalJwt, async (req, res) => {
       pool.query('SELECT * FROM creditors'),
       pool.query('SELECT * FROM insurance_requests'),
       pool.query('SELECT * FROM support_tickets'),
-      pool.query('SELECT * FROM app_notifications'),
+      // Log-type tables are capped to bound payload size; the client trims
+      // these collections anyway (auditLogs>250 / notifications>150 / smsLogs>150).
+      pool.query('SELECT * FROM app_notifications ORDER BY id DESC LIMIT 500'),
       pool.query('SELECT * FROM products'),
       pool.query('SELECT * FROM shop_invoices'),
-      pool.query('SELECT * FROM sms_logs'),
+      pool.query('SELECT * FROM sms_logs ORDER BY id DESC LIMIT 500'),
     ]);
 
     // Parse JSON columns and strip passwords

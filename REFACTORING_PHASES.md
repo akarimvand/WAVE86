@@ -90,6 +90,7 @@
 - [x] جدا کردن CRUD عادی از full-state sync — endpointهای مستقل جدید: POST /api/courses/enrollments (ظرفیت اتمیک با FOR UPDATE)، DELETE /api/courses/enrollments/:id (soft cancel)، POST /api/courses/attendance/batch (upsert اتمیک)، POST /api/finance/invoices (فاکتور+آیتم+کاهش موجودی شرطی+ledger در یک Transaction)
 - [x] سختسازی password خالی: `updateUserVersioned` دیگر هش موجود را با '' پاک نمیکند (`IF(? IS NULL OR ?='', password, ?)`) — saveUser از قبل guard داشت
 - [ ] یکسانسازی الگوی خطاها (400 Validation / 401 AuthN / 403 AuthZ / 409 Conflict / 500 Server) در همه routeها
+- [x] حذف `multipleStatements: true` از پول mysql.ts — سطح حمله stacked-query SQL-injection بسته شد (M2 رفع؛ رانر Migration خودش statementها را جدا اجرا میکند)
 - [x] Graceful shutdown: `closeMySqlPool()` + server.close روی SIGTERM/SIGINT با safety-net timeout
 - [ ] بازبینی `multipleStatements: true` در پول `server/mysql.ts`
 
@@ -100,7 +101,7 @@
 - [x] اتصال ثبت تراکنش فرانت به REST مستقل (`addTransaction` → POST /api/finance/transactions با هدر Idempotency-Key = trx.id)
 - [x] اتصال ثبت فاکتور فرانت به REST مستقل (`createShopInvoice` → POST /api/finance/invoices؛ کاهش موجودی اتمیک سمت سرور ⇒ oversell/negative stock غیرممکن)
 - [x] اتصال Enrollment فرانت به REST مستقل (`enrollAthlete` → POST + `cancelEnrollment` → DELETE soft)
-- [ ] Idempotency برای Enrollment و Attendance
+- [x] Idempotency برای Enrollment (تکرار ثبتنام فعال ⇒ 409 Conflict) و Attendance (server-side lookup-upsert بر کلید sessionId+date+userId + ارسال id محلی از فرانت ⇒ ذخیره مجدد/Retry هرگز ردیف duplicate نمیسازد)
 
 ## Phase 4 — Frontend Data Flow (ادامه)
 - [x] حفظ داده در خطا + Merge محافظ
@@ -114,13 +115,14 @@
 
 ## Phase 5 — Security (ادامه)
 - [x] Credential Management + PII Strip + JWT سختگیرانه
-- [ ] Pagination/Filtering روی full-data یا APIهای صفحهمحور (`?page=&limit=&search=`)
-- [ ] Audit Trail کامل: userId, action, entity, entityId, timestamp, oldValue, newValue, ip, userAgent
-- [ ] ثبت Audit برای عملیات حساس (حذف کاربر، تغییر مبلغ، پرداخت، ابطال، اشتراک، حضور، نقش)
-- [ ] اجبار تغییر رمز در اولین ورود ادمین seed (mustChangePassword)
-- [ ] بازبینی دقیق تفکیک دسترسی نقشها
+- [x] Pagination/Search/Filter روی `GET /api/users` (`?page=&limit=&search=&role=&isActive=` — backward compatible: بدون پارامتر، لیست کامل مثل قبل) + cap امن ۵۰۰ ردیفی روی جداول لاگ (notifications/sms_logs) در full-data
+- [x] Audit Trail کامل سمت سرور: Migration 004 (`oldValue/newValue/ip/userAgent`) + ماژول `server/audit.ts` با fallback ایمن برای دیتابیسهای pre-migration
+- [x] ثبت Audit عملیات حساس: حذف کاربر (کل رکورد قدیمی)، تغییر نقش کاربر (تشخیص خودکار roles diff)، ابطال تراکنش مالی (oldValue کامل)، ثبت فاکتور فروشگاه، ثبتنام/لغو ثبتنام سانس
+- [x] mustChangePassword (بکاند): Migration 004 ستون + seed ادمین flag=1 + reset خودکار پس از change-password موفق
+- [ ] enforcement سمت UI: اجبار به صفحه تغییر رمز وقتی `mustChangePassword=true` (فلگ در پاسخ login موجود است)
+- [ ] بازبینی دقیق تفکیک دسترسی نقشها (نکته: `requireRoles` فعلی برای admin/super_admin bypass دارد — رفتار مستند شد)
 
-## Phase 6 — Backup & Recovery 🔶 (پیادهسازی کامل؛ تست اجرایی باقی است)
+## Phase 6 — Backup & Recovery (پیادهسازی کامل در لیست ۱؛ فقط Test 8 اجرایی مانده)
 - [x] Backup خودکار دوره‌ای (`server/backupScheduler.ts` — interval از env، اولین اجرا بعد از boot)
 - [x] پوشش هر ۲۰ جدول کسبوکار در خروجی JSON
 - [x] Retention: ۷ روزانه کامل + جدیدترینِ ۴ هفته + جدیدترینِ ۳ ماه + حذف خودکار مابقی
@@ -150,10 +152,75 @@
 | حذف FileStore | ✅ تکمیل | 100% |
 | Phase 1 — Database Integrity | 🔶 در جریان | ~60% |
 | Phase 2 — Persistence | 🔶 در جریان | ~90% |
-| Phase 3 — Concurrency | 🔶 هسته تکمیل | ~90% |
+| Phase 3 — Concurrency | 🔶 هسته تکمیل | ~95% |
 | Phase 4 — Frontend Data Flow | 🔶 در جریان | ~70% |
-| Phase 5 — Security | 🔶 بخش بحرانی | ~60% |
+| Phase 5 — Security | 🔶 هسته تکمیل | ~85% |
 | Phase 6 — Backup & Recovery | 🔶 پیادهسازی کامل | ~85% |
 | Phase 7 — Testing | ⬜ نیازمند محیط اجرا | 0% |
 
+### فایلهای جدید این دور (Phase 5 ادامه)
+| فایل | نقش |
+|---|---|
+| `server/audit.ts` | ماژول Audit Trail مرکزی (writeAudit + getRequestInfo + fallback) |
+| `database/migrations/004_audit_enrichment_and_must_change_password.sql` | ستونهای oldValue/newValue/ip/userAgent + mustChangePassword |
+
 > **یادداشت:** موارد «زیرساخت آماده ✓» در Phase 7 یعنی کد سمت سرور/کلاینت پیاده شده اما اجرای واقعی تست نیازمند نصب وابستگیها (`npm install`) و MySQL فعال است.
+
+---
+
+## 📁 فایلهای ایجادشده / تغییر یافته
+
+### فایلهای جدید
+| فایل | نقش |
+|---|---|
+| `AUDIT.md` | گزارش کامل Phase 0 (معماری، API Map، DB Map، باگها با Severity) |
+| `REFACTORING_PHASES.md` | همین سند ردیابی |
+| `BACKUP_RECOVERY.md` | RPO/RTO، Retention، رویه Restore، چکلیست تأیید |
+| `server/migrations.ts` | رانر Migration (idempotent + schema_migrations) |
+| `database/migrations/001_add_version_columns.sql` | ستون version برای ۸ جدول |
+| `database/migrations/002_add_transaction_integrity.sql` | idempotencyKey UNIQUE + soft-void columns |
+| `database/migrations/003_convert_money_to_decimal.sql` | DECIMAL(18,2) برای ۱۰ ستون مالی |
+| `server/backupScheduler.ts` | Backup خودکار + Retention + مقصد دوم |
+
+### فایلهای ویرایششده (سرور)
+| فایل | خلاصه تغییرات |
+|---|---|
+| `server.ts` | اتصال runMigrations + startBackupScheduler + Graceful Shutdown |
+| `server/db.ts` | حذف credential هاردکد؛ `closeMySqlPool()`؛ withTransaction موجود |
+| `server/mysql.ts` | حذف credential هاردکد؛ seed ادمین با bcrypt hash |
+| `server/middleware.ts` | JWT_SECRET env-الزامی + ephemeral fallback |
+| `server/repository.ts` | `updateUserVersioned()` + `userExists()` + password-guard |
+| `server/routes/auth.routes.ts` | حذف FileStore fallback؛ خطای 503 شفاف MySQL |
+| `server/routes/users.routes.ts` | حذف FileStore؛ authenticateJwt در PUT/PATCH؛ Optimistic Locking + 409 |
+| `server/routes/products.routes.ts` | حذف fallback FileStore/DEMO از GET؛ MySQL-only |
+| `server/routes/courses.routes.ts` | حذف FileStore؛ +POST enrollments (FOR UPDATE)؛ +DELETE soft-cancel؛ +POST attendance/batch |
+| `server/routes/finance.routes.ts` | حذف FileStore و موفقیت جعلی؛ Idempotency تراکنش؛ Soft-Void؛ +POST invoices اتمیک |
+| `server/routes/sync.routes.ts` | sync اتمیک بدون FK_CHECKS=0؛ full-data با PII Filter؛ حذف fallback |
+
+### فایلهای ویرایششده (Frontend)
+| فایل | خلاصه تغییرات |
+|---|---|
+| `src/services/db.ts` | pendingLocalMutations + mergePendingLocal (۱۴ کالکشن)؛ حذف clearInMemoryData در خطا؛ server-first createShopInvoice؛ REST مستقل transaction/enrollment/attendance؛ version sync + handle 409؛ soft-void محلی deleteTransaction؛ Double-click Guard |
+| `src/components/ShopExpensesView.tsx` | await کردن createShopInvoice |
+| `src/App.tsx` | (بدون تغییر در این مراحل — sessionStorage فقط session auth نگه میدارد) |
+
+### زیرساخت
+| فایل | تغییر |
+|---|---|
+| `.gitignore` | +config.json، server_db_store.json |
+| `.env.example` | +BACKUP_INTERVAL_HOURS، BACKUP_REMOTE_DIR |
+
+---
+
+## ⚠️ ریسکهای باقیمانده (شفاف)
+
+1. **تست اجرایی انجام نشده** — هیچ Testی از ۱ تا ۸ واقعاً اجرا نشده (`node_modules` نصب نیست). همه ادعاهای PASS فقط پس از اجرای Phase 7 معتبر میشوند.
+2. **Optimistic Locking فقط روی users** — سایر Entityها هنوز version-aware نیستند از مسیر PUT اختصاصی.
+3. **saveAll() بهعنوان fallback** — بعد از REST موفق هنوز full-state sync هم اجرا میشود (idempotent ولی زائد؛ باید در پاکسازی نهایی حذف شود).
+4. **FK واقعی اعمال نشده** — نیازمند اسکن Orphan Records روی داده زنده قبل از ALTER.
+5. **full-data هنوز سنگین** — PII فیلتر شده و لاگها cap شدند؛ Pagination کامل روی جداول business (users>۵۰۰ رکورد و...) هنوز فقط روی `/api/users` فعال است.
+6. **Audit Trail** — سمت سرور کامل شد (oldValue/newValue/ip/userAgent)؛ اما Auditهای frontend-driven هنوز بدون ip/userAgent هستند.
+7. **mustChangePassword** — بکاند کامل؛ enforcement سمت UI (ریدایرکت اجباری) باقی است.
+8. **Backup Remote = filesystem** — S3/SFTP پشتیبانی نمیشود؛ فقط مسیر mount شده.
+9. **sessionStorage auth** — توکن و currentUser در sessionStorage میماند (استاندارد SPA؛ XSS risk متعارف).
+10. **Credential Rotation** — اگر credential قبلاً لو رفته، چرخاندن آن (تغییر پسورد MySQL) همچنان بر عهده ادمین است.

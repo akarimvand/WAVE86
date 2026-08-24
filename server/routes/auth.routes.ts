@@ -145,6 +145,14 @@ router.post('/change-password', authenticateJwt, validateRequestBody(['oldPasswo
       user.id,
     ]);
 
+    // Clear the must-change-password flag after a successful change (Phase 5).
+    // Column exists after Migration 004; non-fatal on older databases.
+    try {
+      await pool.query('UPDATE users SET mustChangePassword = 0 WHERE id = ?', [user.id]);
+    } catch (flagErr: any) {
+      console.warn('[Auth] mustChangePassword flag update skipped:', flagErr.message || flagErr);
+    }
+
     res.json({
       success: true,
       message: 'کلمه عبور با موفقیت تغییر یافت.',

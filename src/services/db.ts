@@ -1814,15 +1814,23 @@ class StorageEngine {
       body: JSON.stringify({
         sessionId,
         date,
-        records: records.map((rec) => ({
-          userId: rec.userId,
-          userName: rec.userName,
-          status: rec.status,
-          reason: rec.reason,
-          checkInTime: rec.checkInTime,
-          checkOutTime: rec.checkOutTime,
-          recordedAt: nowJalali,
-        })),
+        records: records.map((rec) => {
+          // Send the existing local record id so server-side upsert UPDATES
+          // instead of inserting a duplicate row on repeated saves/retries.
+          const existing = this.attendanceRecords.find(
+            (a) => a.sessionId === sessionId && a.date === date && a.userId === rec.userId
+          );
+          return {
+            id: existing?.id,
+            userId: rec.userId,
+            userName: rec.userName,
+            status: rec.status,
+            reason: rec.reason,
+            checkInTime: rec.checkInTime,
+            checkOutTime: rec.checkOutTime,
+            recordedAt: nowJalali,
+          };
+        }),
       }),
     }).catch((e) => console.warn('Direct attendance API error:', e));
 
