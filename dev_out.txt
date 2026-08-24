@@ -48,3 +48,139 @@
 [2m3:53:54 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
 [2m3:55:50 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcheck-dup-enr.mjs[22m
 [2m3:55:50 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58879456,
+  length: 58879456,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58878827,
+  length: 58878827,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58879300,
+  length: 58879300,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58879772,
+  length: 58879772,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58880200,
+  length: 58880200,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58880149,
+  length: 58880149,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58884003,
+  length: 58884003,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58878203,
+  length: 58878203,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
