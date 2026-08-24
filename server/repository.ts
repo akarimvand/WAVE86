@@ -259,7 +259,9 @@ export class SyncRepository {
 
     const [result]: any = await pool.query(
       `UPDATE users SET
-        username=?, password=?, firstName=?, lastName=?, fullName=?, fatherName=?, shenasnamehNo=?, nationalId=?,
+        username=?, 
+        password=IF(? IS NULL OR ? = '', password, ?),
+        firstName=?, lastName=?, fullName=?, fatherName=?, shenasnamehNo=?, nationalId=?,
         birthDate=?, gender=?, phone=?, emergencyContactName=?, emergencyContactRelation=?, emergencyContactPhone=?,
         bloodType=?, shoeSize=?, clothingSize=?, address=?, medicalConditions=?, referrerName=?, referrerPhone=?,
         educationOrJob=?, climbingExperienceLevel=?, roles=?, activeRole=?, isActive=?, insuranceNumber=?,
@@ -267,6 +269,8 @@ export class SyncRepository {
        WHERE id = ? AND version = ?`,
       [
         u.username || u.nationalId || u.id,
+        pwd || null,
+        pwd || '',
         pwd,
         u.firstName || '',
         u.lastName || '',
