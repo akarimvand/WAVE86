@@ -1,0 +1,145 @@
+# WAVE86 — نقشه راه اصلاحات (Progress Tracker)
+
+> **این فایل زنده است.** هر مورد که کامل شود با `[x]` تیک میخورد.
+> گزارش کامل یافتهها: [`AUDIT.md`](./AUDIT.md)
+> آخرین بهروزرسانی: 2026-08-24
+
+---
+
+# 📋 لیست ۱ — فازهای تکمیلشده
+
+## Phase 0 — Audit ✅
+- [x] مستندسازی معماری فعلی (Frontend Store → REST → Repository → MySQL)
+- [x] نقشه کامل API (همه endpointها با وضعیت Auth)
+- [x] نقشه Database (۲۰ جدول؛ FK تنها روی shop_invoice_items)
+- [x] شناسایی Critical Bugs (C1 تا C9)
+- [x] شناسایی مشکلات امنیتی (PII، credentials، JWT_SECRET، seed password)
+- [x] شناسایی ریسکهای Lost Data
+- [x] ایجاد فایل گزارش `AUDIT.md`
+
+## حذف لایه FileStore (پایه Single Source of Truth) ✅
+- [x] حذف کامل `server/fileStore.ts`
+- [x] حذف `server_db_store.json` و افزودن به `.gitignore`
+- [x] حذف همه importها و فراخوانیهای FileStore از ۶ فایل route
+- [x] تبدیل fallbackهای خاموش به خطای واقعی HTTP (500/503)
+- [x] تأیید صفر شدن ارجاعات fileStore در کل کدبیس
+
+## Phase 2 — Persistence (هسته اصلی) ✅
+- [x] `POST /api/mysql/sync` کاملاً اتمیک (`withTransaction` + COMMIT/ROLLBACK واقعی)
+- [x] حذف `SET FOREIGN_KEY_CHECKS=0` از مسیر عادی sync
+- [x] حذف همه `.catch(console.warn)` خفهکننده خطا در sync (Partial Write ممنوع)
+- [x] پاسخ خطای واقعی 500 به جای موفقیت جعلی در users/products/courses/finance/sync
+
+## Phase 3 — Concurrency ✅
+- [x] سیستم Migration: رانر `server/migrations.ts` + جدول `schema_migrations`
+- [x] اجرای statement-by-statement در رانر + تحمل ER_DUP_FIELDNAME/ER_DUP_KEYNAME
+- [x] Migration 001: ستون `version INT NOT NULL DEFAULT 1` برای ۸ جدول حساس
+- [x] Migration 002: `idempotencyKey UNIQUE` + `voidedAt/voidedBy/voidReason` روی transactions
+- [x] Migration 003: تبدیل DOUBLE → `DECIMAL(18,2)` در ۱۰ ستون مالی
+- [x] اتصال خودکار رانر به startup سرور (`server.ts`)
+- [x] `SyncRepository.updateUserVersioned()` — قفل خوشبینانه واقعی
+- [x] `SyncRepository.userExists()` برای تفکیک 404 از 409
+- [x] PUT/PATCH `/api/users/:id`: Optimistic Locking + پاسخ HTTP 409 Conflict
+- [x] Idempotency ثبت تراکنش مالی (هدر `Idempotency-Key` یا body + handle race)
+- [x] حذف فیزیکی تراکنش ممنوع → Soft-Void با who/when/why
+- [x] Frontend `deleteTransaction` هماهنگ با soft-void سرور
+- [x] بهروزرسانی version محلی از پاسخ موفق + reload روی 409
+- [x] Double-click Guard مرکزی (`canSubmitFinancialAction`, پنجره ۱۵۰۰ms)
+- [x] ادغام pending کاربران در `loadFromBackendMySql`
+
+## Phase 4 — Frontend Data Flow (بخش بحرانی) ✅
+- [x] حذف `clearInMemoryData()` از مسیر خطا — «خطای دیتابیس ≠ دیتابیس خالی»
+- [x] زیرساخت `pendingLocalMutations` (markPendingUpsert/Delete/mergePendingLocal/clearPendingMutations)
+- [x] Merge محافظ در `loadFromBackendMySql` برای ۱۴ کالکشن
+- [x] پاک شدن pending فقط بعد از تأیید موفق سرور در `syncWithBackendMySql`
+- [x] markPending در addProduct/updateProduct/deleteProduct/addTransaction/deleteTransaction/updateUser/updateUserProfile
+- [x] `updateUserProfile` ارسال توکن JWT (الزام PUT جدید)
+
+## Phase 5 — Security (بخش بحرانی) ✅
+- [x] حذف credential هاردکد از `server/mysql.ts` → Environment Variables
+- [x] `config.json` از گیت خارج شد (`git rm --cached`) + `.gitignore`
+- [x] `optionalJwt` → `authenticateJwt` در PUT/PATCH users + رفع باگ بایپس isStaff
+- [x] PII Filtering در `GET /api/mysql/full-data` برای غیرکارمندان و ناشناسان
+- [x] حذف JWT_SECRET ثابت → env الزامی + fallback تصادفی ephemeral
+- [x] پسورد seed ادمین بهصورت bcrypt hash ذخیره میشود
+
+---
+
+# 🔧 لیست ۲ — فازهای در جریان و باقیمانده
+
+## Phase 1 — Database Integrity (در جریان)
+- [x] Migration System
+- [x] Version Columns (Migration 001)
+- [x] Money DECIMAL(18,2) (Migration 003)
+- [ ] اسکن Orphan Records روی دیتابیس زنده (نیازمند MySQL در دسترس)
+- [ ] افزودن FK واقعی بین users/enrollments/transactions/attendance/sessions/products
+- [ ] بازبینی و افزودن Indexهای لازم بر اساس کوئریهای پرتکرار
+- [ ] هماهنگسازی `database/schema.sql` با runtime schema (حذف دوگانگی Source of Truth)
+
+## Phase 2 — Persistence (ادامه)
+- [x] Transactions اتمیک در مسیر sync
+- [ ] جدا کردن CRUD عادی از full-state sync (Enrollment/Attendance/Debtor/Creditor endpoints کامل)
+- [ ] سختسازی `saveUser`/`updateUserVersioned` در برابر password خالی
+- [ ] یکسانسازی الگوی خطاها (400 Validation / 401 AuthN / 403 AuthZ / 409 Conflict / 500 Server) در همه routeها
+- [ ] Graceful shutdown: `pool.end()` روی SIGTERM/SIGINT
+- [ ] بازبینی `multipleStatements: true` در پول `server/mysql.ts`
+
+## Phase 3 — Concurrency (ادامه - پوشش کامل)
+- [x] Version + 409 روی users (REST)
+- [ ] تعمیم Optimistic Locking به enrollments/transactions/attendance/products/debtors/creditors
+- [x] Idempotency سمت سرور برای transactions
+- [ ] اتصال ثبت تراکنش/فاکتور فرانت به REST مستقل (استفاده واقعی از Idempotency-Key)
+- [ ] Idempotency برای Enrollment و Attendance
+
+## Phase 4 — Frontend Data Flow (ادامه)
+- [x] حفظ داده در خطا + Merge محافظ
+- [ ] await کردن fetchهای fire-and-forget در متدهای Mutation
+- [ ] نمایش «ذخیره شد» فقط بعد از پاسخ 2xx واقعی سرور (C9 کامل)
+- [ ] کاهش payload `updateUserProfile`/`updateUser` به فیلدهای مجاز (whitelist)
+- [ ] حالت Offline/Error در UI با Retry کنترلشده (بنر قطع ارتباط + صف تغییرات)
+- [ ] حذف کامل وابستگی عملیات عادی به `saveAll()/syncWithBackendMySql()`
+
+## Phase 5 — Security (ادامه)
+- [x] Credential Management + PII Strip + JWT سختگیرانه
+- [ ] Pagination/Filtering روی full-data یا APIهای صفحهمحور (`?page=&limit=&search=`)
+- [ ] Audit Trail کامل: userId, action, entity, entityId, timestamp, oldValue, newValue, ip, userAgent
+- [ ] ثبت Audit برای عملیات حساس (حذف کاربر، تغییر مبلغ، پرداخت، ابطال، اشتراک، حضور، نقش)
+- [ ] اجبار تغییر رمز در اولین ورود ادمین seed (mustChangePassword)
+- [ ] بازبینی دقیق تفکیک دسترسی نقشها
+
+## Phase 6 — Backup & Recovery ⬜ (شروع نشده)
+- [ ] Backup روزانه خودکار (MySQL → Local + Remote)
+- [ ] Retention: ۷ نسخه روزانه / ۴ هفتگی / ۳ ماهانه
+- [ ] نگهداری نسخه پشتیبان خارج از سرور اصلی
+- [ ] اسکریپت تست Restore روی MySQL جدا
+- [ ] تعریف و مستندسازی RPO و RTO
+
+## Phase 7 — Testing ⬜ (نیازمند محیط اجرا: npm install + MySQL زنده)
+- [ ] Test 1 — قطع اینترنت حین Save: UI نباید Saved نشان دهد؛ Retry دوباره ثبت نکند
+- [ ] Test 2 — دو Browser، ویرایش همزمان یک User: یکی 409 بگیرد (زیرساخت آماده ✓)
+- [ ] Test 3 — خطای وسط Transaction: Rollback کامل (زیرساخت آماده ✓)
+- [ ] Test 4 — Refresh سریع حین Save: داده ناپدید نشود (زیرساخت آماده ✓)
+- [ ] Test 5 — Double Click پرداخت: فقط یک Transaction (زیرساخت آماده ✓)
+- [ ] Test 6 — Timeout + Retry: Duplicate نشود (Idempotency آماده ✓)
+- [ ] Test 7 — Restart MySQL: کرش دائمی نداشته باشد
+- [ ] Test 8 — Restore بکآپ روی MySQL جدا
+- [ ] چرخه کامل Data Integrity: CREATE → READ → UPDATE → REFRESH → RESTART → BACKUP → RESTORE → READ
+- [ ] سناریوهای همزمانی: PUT+GET / POST+GET / DELETE(CANCEL)+UPDATE
+
+---
+
+## 📊 وضعیت کلی فازها
+
+| فاز | وضعیت | پیشرفت |
+|---|---|---|
+| Phase 0 — Audit | ✅ تکمیل | 100% |
+| حذف FileStore | ✅ تکمیل | 100% |
+| Phase 1 — Database Integrity | 🔶 در جریان | ~60% |
+| Phase 2 — Persistence | 🔶 در جریان | ~70% |
+| Phase 3 — Concurrency | 🔶 هسته تکمیل | ~80% |
+| Phase 4 — Frontend Data Flow | 🔶 بخش بحرانی | ~55% |
+| Phase 5 — Security | 🔶 بخش بحرانی | ~60% |
+| Phase 6 — Backup & Recovery | ⬜ شروع نشده | 0% |
+| Phase 7 — Testing | ⬜ نیازمند محیط اجرا | 0% |
+
+> **یادداشت:** موارد «زیرساخت آماده ✓» در Phase 7 یعنی کد سمت سرور/کلاینت پیاده شده اما اجرای واقعی تست نیازمند نصب وابستگیها (`npm install`) و MySQL فعال است.
