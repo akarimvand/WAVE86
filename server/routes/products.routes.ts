@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { getMySqlPool, withTransaction } from '../db';
 import { SyncRepository } from '../repository';
 import { authenticateJwt, optionalJwt, requireRoles, validateRequestBody } from '../middleware';
-import { readFileStore, writeFileStore, deleteFromFileStore } from '../fileStore';
 
 const router = Router();
 
@@ -108,15 +107,11 @@ router.get('/', async (req, res, next) => {
     }));
     res.json({ success: true, dbConnected: true, products });
   } catch (err: any) {
-    console.warn('[Products MySQL Notice - Serving from File Store]', err.message || err);
-    const store = readFileStore();
-    const fallbackProducts = Array.isArray(store.products) && store.products.length > 0
-      ? store.products
-      : DEMO_PRODUCTS_SEED;
-    res.json({
-      success: true,
+    console.error('[Products MySQL Error]', err.message || err);
+    res.status(500).json({
+      success: false,
       dbConnected: false,
-      products: fallbackProducts,
+      error: `خطا در دریافت لیست محصولات: ${err.message || err}`,
     });
   }
 });
@@ -265,10 +260,8 @@ router.delete('/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'se
     const pool = getMySqlPool();
 
     await pool.query('DELETE FROM products WHERE id = ?', [id]);
-    deleteFromFileStore('products', id);
     res.json({ success: true, message: 'محصول با موفقیت حذف گردید.' });
   } catch (err: any) {
-    deleteFromFileStore('products', req.params.id);
     res.status(500).json({ success: false, error: `خطا در حذف محصول: ${err.message || err}` });
   }
 });

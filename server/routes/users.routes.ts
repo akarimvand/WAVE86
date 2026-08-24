@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { getMySqlPool, hashPassword } from '../db';
 import { SyncRepository } from '../repository';
 import { validateRequestBody, authenticateJwt, optionalJwt, requireRoles, AuthenticatedRequest } from '../middleware';
-import { deleteFromFileStore, readFileStore, writeFileStore } from '../fileStore';
 
 const router = Router();
 const staffGuard = [authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary', 'coach', 'accountant'])];
@@ -75,27 +74,8 @@ router.post('/', ...adminGuard, validateRequestBody(['nationalId']), async (req,
       u.password = await hashPassword(u.password);
     }
 
-    // Always update FileStore first for high durability
-    try {
-      const currentStore = readFileStore();
-      const existingUsers = currentStore.users || [];
-      const userIdx = existingUsers.findIndex((x: any) => x.id === u.id || (x.nationalId && x.nationalId === u.nationalId));
-      if (userIdx >= 0) {
-        existingUsers[userIdx] = { ...existingUsers[userIdx], ...u };
-      } else {
-        existingUsers.push(u);
-      }
-      writeFileStore({ ...currentStore, users: existingUsers });
-    } catch (fsErr) {
-      console.warn('[Users POST FileStore Warning]', fsErr);
-    }
-
-    try {
-      const pool = getMySqlPool();
-      await SyncRepository.saveUser(pool, u);
-    } catch (dbErr: any) {
-      console.warn('[Users POST MySQL Warning - Persisted in FileStore]', dbErr.message || dbErr);
-    }
+    const pool = getMySqlPool();
+    await SyncRepository.saveUser(pool, u);
 
     res.status(201).json({ success: true, message: 'کاربر با موفقیت ذخیره شد.', user: u });
   } catch (err: any) {
@@ -131,28 +111,9 @@ router.put('/:id', optionalJwt, async (req: AuthenticatedRequest, res, next) => 
       u.password = await hashPassword(u.password);
     }
 
-    // Always update FileStore first so changes are immediate & durable
-    try {
-      const currentStore = readFileStore();
-      const existingUsers = currentStore.users || [];
-      const userIdx = existingUsers.findIndex((x: any) => x.id === targetId);
-      if (userIdx >= 0) {
-        existingUsers[userIdx] = { ...existingUsers[userIdx], ...u };
-      } else {
-        existingUsers.push(u);
-      }
-      writeFileStore({ ...currentStore, users: existingUsers });
-    } catch (fsErr) {
-      console.warn('[Users PUT FileStore Warning]', fsErr);
-    }
-
-    // Update MySQL database
-    try {
-      const pool = getMySqlPool();
-      await SyncRepository.saveUser(pool, u);
-    } catch (dbErr: any) {
-      console.warn('[Users PUT MySQL Warning - Persisted in FileStore]', dbErr.message || dbErr);
-    }
+    // Update MySQL database only (single source of truth)
+    const pool = getMySqlPool();
+    await SyncRepository.saveUser(pool, u);
 
     res.json({ success: true, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.', user: u });
   } catch (err: any) {
@@ -187,27 +148,9 @@ router.patch('/:id', optionalJwt, async (req: AuthenticatedRequest, res, next) =
       u.password = await hashPassword(u.password);
     }
 
-    // Always update FileStore
-    try {
-      const currentStore = readFileStore();
-      const existingUsers = currentStore.users || [];
-      const userIdx = existingUsers.findIndex((x: any) => x.id === targetId);
-      if (userIdx >= 0) {
-        existingUsers[userIdx] = { ...existingUsers[userIdx], ...u };
-      } else {
-        existingUsers.push(u);
-      }
-      writeFileStore({ ...currentStore, users: existingUsers });
-    } catch (fsErr) {
-      console.warn('[Users PATCH FileStore Warning]', fsErr);
-    }
-
-    try {
-      const pool = getMySqlPool();
-      await SyncRepository.saveUser(pool, u);
-    } catch (dbErr: any) {
-      console.warn('[Users PATCH MySQL Warning - Persisted in FileStore]', dbErr.message || dbErr);
-    }
+    // Update MySQL database only (single source of truth)
+    const pool = getMySqlPool();
+    await SyncRepository.saveUser(pool, u);
 
     res.json({ success: true, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.', user: u });
   } catch (err: any) {
@@ -224,12 +167,10 @@ router.patch('/:id', optionalJwt, async (req: AuthenticatedRequest, res, next) =
 router.delete('/:id', ...adminGuard, async (req, res, next) => {
   try {
     const pool = getMySqlPool();
-    await SyncRepository.deleteUser(pool, req.params.id).catch(() => {});
-    deleteFromFileStore('users', req.params.id);
+    await SyncRepository.deleteUser(pool, req.params.id);
     res.json({ success: true, message: 'کاربر با موفقیت حذف شد.' });
   } catch (err: any) {
-    deleteFromFileStore('users', req.params.id);
-    res.json({ success: true, message: 'کاربر با موفقیت حذف شد.' });
+    res.status(500).json({ success: false, error: `خطا در حذف کاربر: ${err.message || err}` });
   }
 });
 

@@ -3,25 +3,17 @@ import { getMySqlPool, withTransaction, getClubSettings, loadSavedConfig } from 
 import { SyncRepository } from '../repository';
 import { convertBase64ToLocalFile } from './upload.routes';
 import { authenticateJwt, requireRoles, optionalJwt } from '../middleware';
-import { readFileStore, writeFileStore } from '../fileStore';
 
 const router = Router();
 
 /**
  * POST /api/mysql/sync
- * Atomic batch synchronization from frontend store with authentication and File fallback.
+ * Atomic batch synchronization from the frontend store into MySQL (single source of truth).
  */
 router.post('/sync', authenticateJwt, async (req, res) => {
   const data = req.body;
   if (!data || typeof data !== 'object') {
     return res.status(400).json({ success: false, error: 'داده‌های همگام‌سازی نامعتبر است.' });
-  }
-
-  // Always save data to server persistent fileStore first so data is NEVER lost
-  try {
-    writeFileStore(data);
-  } catch (fsErr) {
-    console.warn('[Sync FileStore Warning]', fsErr);
   }
 
   try {
@@ -62,12 +54,11 @@ router.post('/sync', authenticateJwt, async (req, res) => {
       message: 'همگام‌سازی با پایگاه داده MySQL با موفقیت انجام شد.',
     });
   } catch (err: any) {
-    console.warn('[Sync MySQL Notice - Saved to File Store]', err.message || err);
-    return res.json({
-      success: true,
+    console.error('[Sync MySQL Error]', err.message || err);
+    return res.status(503).json({
+      success: false,
       dbConnected: false,
-      fallbackSaved: true,
-      message: 'اطلاعات در حافظه سرور ذخیره شد (MySQL در وضعیت آفلاین است).',
+      error: 'همگام‌سازی با MySQL ناموفق بود؛ تغییرات ذخیره نمی‌شوند. لطفاً اتصال دیتابیس را بررسی کنید.',
     });
   }
 });
@@ -98,14 +89,6 @@ router.post('/sync-detailed', authenticateJwt, requireRoles(['super_admin', 'adm
   addLog('info', '🚀 شروع فرآیند همگام‌سازی و تحلیل خط‌به‌خط...');
   addLog('info', `📡 تلاش برای اتصال به پایگاه داده ${config.database} بر روی ${config.host}:${config.port}...`);
 
-  // Always persist incoming sync data to FileStore first
-  try {
-    writeFileStore(data);
-    addLog('info', '💾 بسته‌ی کامل اطلاعات بر روی حافظه پایدار سرور (FileStore) ذخیره شد.');
-  } catch (fsErr: any) {
-    addLog('warn', `⚠️ هشدار در ذخیره سازی حافظه سرور: ${fsErr.message || fsErr}`);
-  }
-
   let dbConnected = false;
   let pool: any = null;
 
@@ -118,53 +101,21 @@ router.post('/sync-detailed', authenticateJwt, requireRoles(['super_admin', 'adm
     }
   } catch (connErr: any) {
     addLog('error', `❌ خطا در برقراری اتصال به MySQL: ${connErr.message || connErr}`);
-    addLog('info', 'ℹ️ اطلاعات در حافظه داخلی سرور ذخیره شد و در صورت اتصال مجدد به دیتابیس همگام خواهد شد.');
-    
-    const syncEntitiesQuick = [
-      { key: 'roles', table: 'roles', title: 'نقش‌ها و دسترسی‌های سیستم', count: (data.roles || []).length },
-      { key: 'users', table: 'users', title: 'کاربران و اعضای باشگاه', count: (data.users || []).length },
-      { key: 'links', table: 'parent_athlete_links', title: 'پیوند والد و فرزند', count: (data.links || []).length },
-      { key: 'preRegistrations', table: 'pre_registrations', title: 'پیش‌ثبت‌نام‌ها', count: (data.preRegistrations || []).length },
-      { key: 'clubSettings', table: 'club_settings', title: 'تنظیمات و هویت باشگاه', count: data.clubSettings ? 1 : 0 },
-      { key: 'announcements', table: 'club_announcements', title: 'اطلاعیه‌ها و بنرها', count: (data.announcements || []).length },
-      { key: 'sessions', table: 'courses', title: 'دوره‌ها و سانس‌های ورزشی', count: (data.sessions || data.courses || []).length },
-      { key: 'enrollments', table: 'enrollments', title: 'ثبت‌نام‌های کلاسی', count: (data.enrollments || []).length },
-      { key: 'transactions', table: 'transactions', title: 'تراکنش‌های مالی', count: (data.transactions || []).length },
-      { key: 'attendanceRecords', table: 'attendance_records', title: 'سوابق حضور و غیاب', count: (data.attendanceRecords || []).length },
-      { key: 'debtors', table: 'debtors', title: 'لیست بدهکاران', count: (data.debtors || []).length },
-      { key: 'creditors', table: 'creditors', title: 'لیست بستانکاران', count: (data.creditors || []).length },
-      { key: 'insuranceRequests', table: 'insurance_requests', title: 'درخواست‌های بیمه ورزشی', count: (data.insuranceRequests || []).length },
-      { key: 'supportTickets', table: 'support_tickets', title: 'تیکت‌های پشتیبانی', count: (data.supportTickets || []).length },
-      { key: 'notifications', table: 'app_notifications', title: 'اعلان‌های درون‌برنامه‌ای', count: (data.notifications || []).length },
-      { key: 'products', table: 'products', title: 'محصولات و انبار فروشگاه', count: (data.products || []).length },
-      { key: 'shopInvoices', table: 'shop_invoices', title: 'فاکتورهای فروشگاهی', count: (data.shopInvoices || []).length },
-      { key: 'smsLogs', table: 'sms_logs', title: 'سوابق پیامک‌های ارسالی', count: (data.smsLogs || []).length },
-      { key: 'auditLogs', table: 'audit_logs', title: 'ردگیری و لاگ سیستم', count: (data.auditLogs || []).length },
-    ];
-
-    return res.json({
-      success: true,
+    addLog('error', '❌ دیتابیس MySQL در دسترس نیست؛ داده‌ها ذخیره نمی‌شوند.');
+    return res.status(503).json({
+      success: false,
       dbConnected: false,
-      fallbackSaved: true,
       config: {
         host: config.host,
         port: config.port,
         database: config.database,
         user: config.user,
       },
-      steps: syncEntitiesQuick.map(e => ({
-        step: e.key,
-        table: e.table,
-        title: e.title,
-        count: e.count,
-        status: 'success',
-        durationMs: 1,
-        message: `${e.count} رکورد در حافظه پایدار سرور ذخیره شد (منتظر اتصال به MySQL).`
-      })),
+      steps: [],
       logs,
       summary: {
-        totalTables: syncEntitiesQuick.length,
-        successTables: syncEntitiesQuick.length,
+        totalTables: 0,
+        successTables: 0,
         failedTables: 0,
         durationMs: Date.now() - startTime,
       },
@@ -509,23 +460,17 @@ router.get('/full-data', optionalJwt, async (req, res) => {
       smsLogs: parsedSmsLogs,
     };
 
-    try {
-      writeFileStore(responseData);
-    } catch {}
-
     return res.json({
       success: true,
       dbConnected: true,
       data: responseData,
     });
   } catch (err: any) {
-    console.warn('[Full Data MySQL Notice - Serving from File Store]', err.message || err);
-    const fileStoreData = readFileStore();
-    return res.json({
-      success: true,
+    console.error('[Full Data MySQL Error]', err.message || err);
+    return res.status(503).json({
+      success: false,
       dbConnected: false,
-      fallback: true,
-      data: fileStoreData,
+      error: `خطا در دریافت داده‌ها از MySQL: ${err.message || err}`,
     });
   }
 });

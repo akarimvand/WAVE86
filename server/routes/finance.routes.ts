@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { getMySqlPool } from '../db';
 import { validateRequestBody, authenticateJwt, requireRoles } from '../middleware';
-import { deleteFromFileStore } from '../fileStore';
 
 const router = Router();
 const financeGuard = [authenticateJwt, requireRoles(['super_admin', 'admin', 'accountant', 'secretary'])];
@@ -63,12 +62,10 @@ router.post('/transactions', ...financeGuard, validateRequestBody(['amount', 'ty
 router.delete('/transactions/:id', ...financeGuard, async (req, res, next) => {
   try {
     const pool = getMySqlPool();
-    await pool.query('DELETE FROM transactions WHERE id = ?', [req.params.id]).catch(() => {});
-    deleteFromFileStore('transactions', req.params.id);
+    await pool.query('DELETE FROM transactions WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'تراکنش با موفقیت حذف شد.' });
   } catch (err: any) {
-    deleteFromFileStore('transactions', req.params.id);
-    res.json({ success: true, message: 'تراکنش حذف شد.' });
+    res.status(500).json({ success: false, error: `خطا در حذف تراکنش: ${err.message || err}` });
   }
 });
 
@@ -78,12 +75,10 @@ router.delete('/transactions/:id', ...financeGuard, async (req, res, next) => {
 router.delete('/debtors/:id', ...financeGuard, async (req, res, next) => {
   try {
     const pool = getMySqlPool();
-    await pool.query('DELETE FROM debtors WHERE id = ?', [req.params.id]).catch(() => {});
-    deleteFromFileStore('debtors', req.params.id);
+    await pool.query('DELETE FROM debtors WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'بدهکار با موفقیت حذف شد.' });
   } catch (err: any) {
-    deleteFromFileStore('debtors', req.params.id);
-    res.json({ success: true, message: 'بدهکار حذف شد.' });
+    res.status(500).json({ success: false, error: `خطا در حذف بدهکار: ${err.message || err}` });
   }
 });
 
@@ -93,12 +88,10 @@ router.delete('/debtors/:id', ...financeGuard, async (req, res, next) => {
 router.delete('/creditors/:id', ...financeGuard, async (req, res, next) => {
   try {
     const pool = getMySqlPool();
-    await pool.query('DELETE FROM creditors WHERE id = ?', [req.params.id]).catch(() => {});
-    deleteFromFileStore('creditors', req.params.id);
+    await pool.query('DELETE FROM creditors WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'بستانکار با موفقیت حذف شد.' });
   } catch (err: any) {
-    deleteFromFileStore('creditors', req.params.id);
-    res.json({ success: true, message: 'بستانکار حذف شد.' });
+    res.status(500).json({ success: false, error: `خطا در حذف بستانکار: ${err.message || err}` });
   }
 });
 

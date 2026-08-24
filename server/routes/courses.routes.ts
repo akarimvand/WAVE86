@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { getMySqlPool } from '../db';
 import { validateRequestBody, authenticateJwt, requireRoles } from '../middleware';
-import { deleteFromFileStore } from '../fileStore';
 
 const router = Router();
 
@@ -82,12 +81,8 @@ router.delete('/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'se
   try {
     const pool = getMySqlPool();
     await pool.query('DELETE FROM courses WHERE id = ?', [req.params.id]);
-    deleteFromFileStore('sessions', req.params.id);
-    deleteFromFileStore('courses', req.params.id);
     res.json({ success: true, message: 'سانس با موفقیت حذف شد.' });
   } catch (err: any) {
-    deleteFromFileStore('sessions', req.params.id);
-    deleteFromFileStore('courses', req.params.id);
     res.status(500).json({ success: false, error: `خطا در حذف سانس: ${err.message || err}` });
   }
 });
@@ -99,10 +94,8 @@ router.delete('/attendance/:id', authenticateJwt, requireRoles(['super_admin', '
   try {
     const pool = getMySqlPool();
     await pool.query('DELETE FROM attendance_records WHERE id = ?', [req.params.id]);
-    deleteFromFileStore('attendanceRecords', req.params.id);
     res.json({ success: true, message: 'رکورد حضور و غیاب با موفقیت حذف شد.' });
   } catch (err: any) {
-    deleteFromFileStore('attendanceRecords', req.params.id);
     res.status(500).json({ success: false, error: `خطا در حذف حضور و غیاب: ${err.message || err}` });
   }
 });

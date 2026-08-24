@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { getMySqlPool, comparePassword, hashPassword } from '../db';
 import { SyncRepository } from '../repository';
 import { generateToken, authenticateJwt, AuthenticatedRequest, validateRequestBody } from '../middleware';
-import { readFileStore, writeFileStore } from '../fileStore';
 
 const router = Router();
 
@@ -19,15 +18,13 @@ router.post('/login', validateRequestBody(['username', 'password']), async (req,
     try {
       pool = getMySqlPool();
       user = await SyncRepository.findUserByUsername(pool, String(username).trim());
-    } catch (dbErr) {
-      console.warn('[Auth MySQL Notice - Falling back to File Store]', dbErr);
-    }
-
-    if (!user) {
-      const fileStore = readFileStore();
-      const usersList = fileStore.users || [];
-      const trimmed = String(username).trim();
-      user = usersList.find((u: any) => u.username === trimmed || u.nationalId === trimmed);
+    } catch (dbErr: any) {
+      console.error('[Auth MySQL Error]', dbErr.message || dbErr);
+      return res.status(503).json({
+        success: false,
+        dbConnected: false,
+        error: 'عدم امکان ارتباط با دیتابیس MySQL؛ ورود در حال حاضر در دسترس نیست.',
+      });
     }
 
     if (!user) {
@@ -62,16 +59,6 @@ router.post('/login', validateRequestBody(['username', 'password']), async (req,
             new Date().toISOString(),
             user.id,
           ]);
-        }
-
-        const fileStore = readFileStore();
-        if (Array.isArray(fileStore.users)) {
-          const storeUser = fileStore.users.find((u: any) => u.id === user.id);
-          if (storeUser) {
-            storeUser.password = hashed;
-            storeUser.updatedAt = new Date().toISOString();
-            writeFileStore(fileStore);
-          }
         }
 
         user.password = hashed;
