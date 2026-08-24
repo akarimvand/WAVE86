@@ -172,8 +172,24 @@ router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin
       }
 
       const nowIso = new Date().toISOString();
+      // Honor the client-generated id when provided so the optimistic local
+      // record and the server row share ONE identity. Previously the server
+      // generated a fresh id here while the follow-up full-state sync re-inserted
+      // the local row under its own id → the SAME athlete appeared TWICE in the
+      // course (two rows, same sessionId+userId).
+      const clientEnrollmentId =
+        typeof req.body.id === 'string' && req.body.id.trim() !== ''
+          ? req.body.id.trim()
+          : null;
+      const [idClash]: any = await conn.query('SELECT id FROM enrollments WHERE id = ?', [
+        clientEnrollmentId,
+      ]);
+      const enrollmentId =
+        clientEnrollmentId && (!idClash || idClash.length === 0)
+          ? clientEnrollmentId
+          : `enr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const enr = {
-        id: `enr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        id: enrollmentId,
         sessionId,
         userId,
         athleteName: user.fullName || '',

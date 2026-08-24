@@ -112,9 +112,20 @@ export function getMySqlPool(customConfig?: DbConfig): mysql.Pool {
       connectTimeout: 10000,
       enableKeepAlive: true,
       keepAliveInitialDelay: 5000,
+      // Large sync payloads (base64 avatars) previously exceeded the server's
+      // 1MB max_allowed_packet → MySQL dropped the socket mid-write
+      // ("write ECONNRESET" / "connection is in closed state"). The server-side
+      // limit was raised to 64M (SET GLOBAL + my.ini); this client hint keeps
+      // mysql2 from fragmenting large writes.
+      maxAllowedPacket: 64 * 1024 * 1024,
       // multipleStatements intentionally DISABLED (security): closes the
       // stacked-query SQL-injection surface. The migration runner splits
       // .sql files into single statements itself (server/migrations.ts).
+    });
+    pool.on('error', (err) => {
+      // Prevent an unhandled pool-level error from crashing the process; the
+      // next getConnection() transparently recreates healthy connections.
+      console.error('[MySQL Pool] background error:', err.message || err);
     });
   }
   return pool;

@@ -256,6 +256,16 @@ class StorageEngine {
               // Server committed the batch — clear locally-pending mutations
               this.clearPendingMutations();
             }
+          } else if (res.status === 401 || res.status === 403) {
+            // Auth problem, NOT a database problem. The MySQL connection is
+            // healthy — the user's JWT simply expired (or the server restarted
+            // with a new ephemeral secret). Marking the DB "disconnected" here
+            // turned the header indicator yellow on every delete/edit and
+            // misled users into thinking data was not being saved.
+            console.warn('[dbStore] Sync skipped: session expired — please log in again.');
+            try {
+              window.dispatchEvent(new CustomEvent('dbStoreAuthExpired'));
+            } catch {}
           } else {
             this.setDbConnected(false);
           }

@@ -2,21 +2,47 @@
 > wave69-club-management@0.0.0 dev
 > tsx server.ts
 
-[Security] JWT_SECRET environment variable is NOT set. Using an ephemeral random secret — sessions will NOT survive restarts. Set JWT_SECRET in production!
 [Server] Climbing Club Backend running at http://0.0.0.0:3000 (warming up...)
 [Database] Running self-healing schema compatibility checks...
 [Database] Self-healing checks finished successfully.
 [Server] MySQL schema checked and verified successfully.
-[Migration] 005_foreign_keys_indexes.sql: skipping already-existing object (ER_DUP_KEYNAME)
-[Migration] 005_foreign_keys_indexes.sql: skipping already-existing object (ER_DUP_KEYNAME)
-[Migration] Applied 005_foreign_keys_indexes.sql (23 statements)
-[Server] Migrations applied=1 skipped=0
+[Server] Migrations applied=0 skipped=1
 [BackupScheduler] Active — interval 24h, local=C:\xampp\htdocs\WAVE86\backups\auto, remote=NOT CONFIGURED (set BACKUP_REMOTE_DIR)
-[BackupScheduler] Backup created: moj_auto_daily_2026-08-24T10-48-16.json (1083.7 KB) local
-[Sync MySQL Error] Cannot add or update a child row: a foreign key constraint fails (`oytblnmz_mouj`.`parent_athlete_links`, CONSTRAINT `fk_links_athlete` FOREIGN KEY (`athleteId`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE)
-[2m2:20:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2maggressive-tests.mjs[22m
-[2m2:22:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mverify-schema.mjs[22m
-[2m2:22:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2morphan-scan.mjs[22m
-[2m2:22:17 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mREFACTORING_PHASES.md[22m
-[2m2:22:44 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mREFACTORING_PHASES.md[22m
-[2m2:31:05 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/App.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\HeaderInboxModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SyncDiagnosticsModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Sidebar.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\CoachPortalView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DataExportView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AdminAnalyticsDashboard.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\PreRegistrationAdminPanel.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SessionsManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AttendanceTrackerView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\FinancialDashboardView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SmsManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SupportTicketingView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ClubSettingsView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Phase1RolesPermissions.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ShopExpensesView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SportsInsuranceView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\PreRegistrationPublicForm.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\FinancialAccountingView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\UserPortalCoursesView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\EditEnrollmentModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AthleteImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DataImportManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ZipProfilePhotoImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ProductImporterModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ProductDetailModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ExcelPreRegImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Member360Modal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DigitalMembershipCardModal.tsx[22m
+[BackupScheduler] Backup created: moj_auto_daily_2026-08-24T12-22-41.json (57499.3 KB) local
+[API Error] POST /mysql/sync-detailed: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58875234,
+  length: 58875234,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[API Error] POST /mysql/sync-detailed: PayloadTooLargeError: request entity too large
+    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
+    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
+    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
+    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
+    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
+    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
+    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
+    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
+  expected: 58875234,
+  length: 58875234,
+  limit: 52428800,
+  type: 'entity.too.large'
+}
+[2m3:53:32 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
+[2m3:53:40 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
+[2m3:53:54 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m

@@ -220,6 +220,40 @@ export default function App() {
   // Pending count for badge
   const [pendingCount, setPendingCount] = useState<number>(dbStore.getPendingPreRegistrationsCount());
 
+  // Session-expiry notice (auth ≠ connectivity): shown when a mutation was
+  // queued because the JWT expired, or the store reported an expired session.
+  const [sessionNotice, setSessionNotice] = useState('');
+
+  useEffect(() => {
+    const onAuthExpired = () => {
+      setSessionNotice('نشست شما منقضی شده است. لطفاً دوباره وارد شوید — تغییرات ذخیره‌نشده پس از ورود به‌صورت خودکار اعمال می‌شوند.');
+      try {
+        sessionStorage.removeItem('club_app_token');
+        sessionStorage.removeItem('club_app_is_logged_in');
+      } catch {}
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+    };
+    const onMutationQueued = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      if (detail.status === 401 || detail.status === 403) {
+        setSessionNotice('نشست شما منقضی شده است. تغییرات شما نگه داشته شد و بعد از ورود مجدد اعمال می‌شود.');
+        try {
+          sessionStorage.removeItem('club_app_token');
+          sessionStorage.removeItem('club_app_is_logged_in');
+        } catch {}
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+      }
+    };
+    window.addEventListener('dbStoreAuthExpired', onAuthExpired);
+    window.addEventListener('dbStoreMutationQueued', onMutationQueued);
+    return () => {
+      window.removeEventListener('dbStoreAuthExpired', onAuthExpired);
+      window.removeEventListener('dbStoreMutationQueued', onMutationQueued);
+    };
+  }, []);
+
   useEffect(() => {
     applyThemeToDocument(clubSettings.themePalette);
   }, [clubSettings]);
@@ -259,6 +293,7 @@ export default function App() {
         setCurrentUser(effectiveUser);
         setIsLoggedIn(true);
         setLoginError('');
+        setSessionNotice('');
 
         sessionStorage.setItem('club_app_is_logged_in', 'true');
         sessionStorage.setItem('club_app_current_user', JSON.stringify(effectiveUser));
@@ -391,9 +426,17 @@ export default function App() {
     );
   }
 
+  const bannerEl = sessionNotice ? (
+    <div className="fixed top-0 inset-x-0 z-[100] bg-amber-100 border-b-2 border-amber-400 text-amber-900 text-xs sm:text-sm font-bold text-center px-4 py-2 shadow-lg" role="alert">
+      ⚠️ {sessionNotice}
+      <button onClick={() => setSessionNotice('')} className="mr-3 underline underline-offset-2 hover:no-underline">بستن</button>
+    </div>
+  ) : null;
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-teal-500 selection:text-white dir-rtl">
+        {bannerEl}
         <header className="bg-white/95 backdrop-blur-md border-b border-slate-200 py-3 px-6 flex justify-center items-center shadow-2xs sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <h1 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">{clubSettings.name}</h1>
@@ -558,6 +601,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans selection:bg-teal-500 selection:text-white dir-rtl">
+      {bannerEl}
       {/* Sidebar Component */}
       <Sidebar
         activeTab={activeTab}
