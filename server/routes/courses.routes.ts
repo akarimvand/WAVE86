@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getMySqlPool } from '../db';
+import { getMySqlPool, withTransaction } from '../db';
+import { SyncRepository } from '../repository';
 import { validateRequestBody, authenticateJwt, requireRoles } from '../middleware';
 
 const router = Router();
@@ -101,7 +102,7 @@ router.delete('/attendance/:id', authenticateJwt, requireRoles(['super_admin', '
 });
 
 /**
- * GET /api/enrollments
+ * GET /api/enrollments/list
  */
 router.get('/enrollments/list', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary', 'accountant', 'coach']), async (req, res, next) => {
   try {
@@ -113,6 +114,146 @@ router.get('/enrollments/list', authenticateJwt, requireRoles(['super_admin', 'a
       success: false,
       error: `خطا در دریافت لیست ثبت‌نام‌ها: ${err.message || err}`,
     });
+  }
+});
+
+/**
+ * POST /api/courses/enrollments
+ * Independent CRUD endpoint (no full-state sync needed).
+ * Capacity + duplicate-active checks run INSIDE a transaction with a row lock
+ * (SELECT ... FOR UPDATE) so two concurrent secretaries cannot overbook a session.
+ */
+router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), validateRequestBody(['sessionId', 'userId']), async (req, res, next) => {
+  try {
+    const { sessionId, userId } = req.body;
+    const pool = getMySqlPool();
+
+    const enrollment = await withTransaction(pool, async (conn) => {
+      // Lock the course row to serialize concurrent enrollments on this session
+      const [courseRows]: any = await conn.query('SELECT * FROM courses WHERE id = ? FOR UPDATE', [sessionId]);
+      const course = courseRows && courseRows[0];
+      if (!course) {
+        const err: any = new Error('سانس مورد نظر یافت نشد.');
+        err.status = 404;
+        throw err;
+      }
+
+      const [userRows]: any = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
+      const user = userRows && userRows[0];
+      if (!user) {
+        const err: any = new Error('کاربر مورد نظر یافت نشد.');
+        err.status = 404;
+        throw err;
+      }
+
+      const [dupRows]: any = await conn.query(
+        "SELECT id FROM enrollments WHERE sessionId = ? AND userId = ? AND status = 'active' LIMIT 1",
+        [sessionId, userId]
+      );
+      if (dupRows && dupRows.length > 0) {
+        const err: any = new Error('این ورزشکار در حال حاضر در این سانس ثبت‌نام فعال دارد.');
+        err.status = 409;
+        throw err;
+      }
+
+      const [cntRows]: any = await conn.query(
+        "SELECT COUNT(*) AS cnt FROM enrollments WHERE sessionId = ? AND status = 'active'",
+        [sessionId]
+      );
+      const activeCount = Number(cntRows?.[0]?.cnt ?? 0);
+      const capacity = Number(course.capacity) || 0;
+      if (capacity > 0 && activeCount >= capacity) {
+        const err: any = new Error('ظرفیت این سانس تکمیل شده است.');
+        err.status = 422;
+        throw err;
+      }
+
+      const nowIso = new Date().toISOString();
+      const enr = {
+        id: `enr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        sessionId,
+        userId,
+        athleteName: user.fullName || '',
+        athletePhone: user.phone || '',
+        athleteNationalId: user.nationalId || '',
+        status: 'active',
+        paymentStatus: 'pending',
+        paymentMethod: String(req.body.paymentMethod || 'pos'),
+        enrolledAt: nowIso,
+        startDate: nowIso,
+        endDate: '',
+        expireDate: '',
+        totalSessionsAllowed: Number(course.sessionsLimit) || 12,
+        usedSessionsCount: 0,
+        priceAtEnrollment: Number(course.monthlyFee) || 0,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      await SyncRepository.syncEnrollments(conn, [enr], (url: string) => url);
+      return enr;
+    });
+
+    res.status(201).json({ success: true, message: 'ثبت‌نام با موفقیت انجام شد.', enrollment });
+  } catch (err: any) {
+    if (err.status) {
+      return res.status(err.status).json({ success: false, error: err.message });
+    }
+    res.status(500).json({ success: false, error: `خطا در ثبت‌نام: ${err.message || err}` });
+  }
+});
+
+/**
+ * DELETE /api/courses/enrollments/:id  — soft cancel (never hard delete)
+ */
+router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req, res, next) => {
+  try {
+    const pool = getMySqlPool();
+    await pool.query(
+      "UPDATE enrollments SET status = 'canceled', updatedAt = ? WHERE id = ? AND status != 'canceled'",
+      [new Date().toISOString(), req.params.id]
+    );
+    res.json({ success: true, message: 'ثبت‌نام با موفقیت لغو شد.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در لغو ثبت‌نام: ${err.message || err}` });
+  }
+});
+
+/**
+ * POST /api/courses/attendance/batch
+ * Atomic upsert of multiple attendance records for one session/date.
+ */
+router.post('/attendance/batch', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary', 'coach']), async (req, res, next) => {
+  try {
+    const { sessionId, date, records } = req.body;
+    if (!sessionId || !date || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ success: false, error: 'شناسه سانس، تاریخ و لیست رکوردها الزامی هستند.' });
+    }
+
+    const actor = req.user?.username || req.user?.fullName || 'سیستم';
+
+    const prepared = records.map((rec: any, i: number) => ({
+      id: rec.id || `att-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+      sessionId,
+      date,
+      userId: rec.userId,
+      userName: rec.userName || '',
+      status: rec.status,
+      reason: rec.reason || '',
+      checkInTime: rec.checkInTime || '',
+      checkOutTime: rec.checkOutTime || '',
+      recordedBy: actor,
+      recordedAt: rec.recordedAt || new Date().toISOString(),
+    }));
+
+    const pool = getMySqlPool();
+    await withTransaction(pool, async (conn) => {
+      await SyncRepository.syncAttendanceRecords(conn, prepared);
+    });
+
+    res.json({ success: true, message: `حضور و غیاب ${prepared.length} نفر ثبت شد.`, records: prepared });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در ثبت حضور و غیاب: ${err.message || err}` });
   }
 });
 

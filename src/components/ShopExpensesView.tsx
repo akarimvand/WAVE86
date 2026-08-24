@@ -182,7 +182,7 @@ export function ShopExpensesView({ currentUser }: ShopExpensesViewProps) {
   };
 
   // Confirm and Execute Invoice Creation
-  const handleConfirmAndCreateInvoice = () => {
+  const handleConfirmAndCreateInvoice = async () => {
     setPosError('');
 
     if (!selectedAthleteId || cart.length === 0) {
@@ -190,7 +190,7 @@ export function ShopExpensesView({ currentUser }: ShopExpensesViewProps) {
       return;
     }
 
-    const res = dbStore.createShopInvoice({
+    const res = await dbStore.createShopInvoice({
       athleteId: selectedAthleteId,
       creatorId: currentUser?.id || 'admin',
       creatorName: currentUser?.fullName || 'مسئول فروشگاه',

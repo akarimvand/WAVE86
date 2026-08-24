@@ -1373,6 +1373,27 @@ class StorageEngine {
     }
 
     this.saveAll();
+    this.markPendingUpsert('enrollments', newEnrollment);
+    if (newTrx) this.markPendingUpsert('transactions', newTrx);
+
+    // Direct REST persistence (independent of full-state sync). The server
+    // re-validates capacity & duplicates atomically (SELECT ... FOR UPDATE).
+    fetch('/api/courses/enrollments', {
+      method: 'POST',
+      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        id: newEnrollment.id,
+        sessionId,
+        userId,
+        paymentMethod,
+      }),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        console.warn('[dbStore] Direct enrollment persist failed:', res.status, body?.error || '');
+      }
+    }).catch((e) => console.warn('Direct enrollment API error:', e));
+
     this.addAuditLog('secretary', actorName, 'ثبت‌نام ورزشکار در سانس', 'Enrollment', newEnrollment.id, `ثبت‌نام ${user.fullName} در ${session.title} (تاریخ شروع: ${customStart}، تاریخ پایان: ${customEnd})`);
 
     // Add real-time inbox notification for administrative team
@@ -1486,6 +1507,14 @@ class StorageEngine {
       }
 
       this.saveAll();
+      this.markPendingUpsert('enrollments', enr);
+
+      // Direct REST soft-cancel (independent of full-state sync)
+      fetch(`/api/courses/enrollments/${enrollmentId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      }).catch((e) => console.warn('Direct enrollment cancel API error:', e));
+
       this.addAuditLog('secretary', actorName, 'لغو ثبت‌نام سانس', 'Enrollment', enrollmentId, `لغو ثبت‌نام ${enr.athleteName} و پاکسازی خودکار بدهی‌ها و تراکنش‌های مالی معلق مربوطه`);
     }
   }
@@ -1569,6 +1598,20 @@ class StorageEngine {
     }
 
     this.saveAll();
+    this.markPendingUpsert('transactions', newTrx);
+
+    // Direct REST persistence with Idempotency-Key (independent of full-state sync).
+    // The key = transaction id, so a retry can never create a duplicate row.
+    fetch('/api/finance/transactions', {
+      method: 'POST',
+      headers: this.getAuthHeaders({ 'Content-Type': 'application/json', 'Idempotency-Key': newTrx.id }),
+      body: JSON.stringify({ ...newTrx, idempotencyKey: newTrx.id }),
+    }).then(async (res) => {
+      if (!res.ok && res.status !== 409) {
+        console.warn('[dbStore] Direct transaction persist failed:', res.status);
+      }
+    }).catch((e) => console.warn('Direct transaction API error:', e));
+
     this.addAuditLog('accountant', actorName, 'ثبت تراکنش مالی', 'FinancialTransaction', newTrx.id, `ثبت مبلغ ${(newTrx.amount ?? 0).toLocaleString('fa-IR')} تومان برای ${newTrx.userName}`);
     return newTrx;
   }
@@ -1757,6 +1800,32 @@ class StorageEngine {
 
     this.checkAndExpireEnrollments();
     this.saveAll();
+    records.forEach((rec) => {
+      const saved = this.attendanceRecords.find(
+        (a) => a.sessionId === sessionId && a.date === date && a.userId === rec.userId
+      );
+      if (saved) this.markPendingUpsert('attendanceRecords', saved);
+    });
+
+    // Direct REST batch persistence (atomic upsert on the server, independent of sync)
+    fetch('/api/courses/attendance/batch', {
+      method: 'POST',
+      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        sessionId,
+        date,
+        records: records.map((rec) => ({
+          userId: rec.userId,
+          userName: rec.userName,
+          status: rec.status,
+          reason: rec.reason,
+          checkInTime: rec.checkInTime,
+          checkOutTime: rec.checkOutTime,
+          recordedAt: nowJalali,
+        })),
+      }),
+    }).catch((e) => console.warn('Direct attendance API error:', e));
+
     this.addAuditLog('coach', actorName, 'ثبت حضور و غیاب', 'Attendance', sessionId, `ثبت حضور غیاب تاریخ ${date} برای ${records.length} ورزشکار`);
     return this.getAttendanceRecords(sessionId, date);
   }
@@ -2743,7 +2812,7 @@ class StorageEngine {
     return false;
   }
 
-  public createShopInvoice(data: {
+  public async createShopInvoice(data: {
     athleteId: string;
     athleteName?: string;
     creatorId: string;
@@ -2752,7 +2821,7 @@ class StorageEngine {
     items: { productId: string; quantity: number }[];
     paymentMethod: 'cash' | 'credit';
     notes?: string;
-  }): { success: boolean; invoice?: ShopInvoice; error?: string } {
+  }): Promise<{ success: boolean; invoice?: ShopInvoice; error?: string }> {
     if (!data.items || data.items.length === 0) {
       return { success: false, error: 'سبد خرید خالی است.' };
     }
@@ -2785,51 +2854,71 @@ class StorageEngine {
       }
     }
 
-    // Verify product stock & calculate totals
-    const invoiceItems: ShopInvoiceItem[] = [];
-    let totalAmount = 0;
+    // ---- Server-first persistence (Phase 2/4): the DB is the single source of truth.
+    // Prices and stock are validated & applied atomically on the SERVER.
+    // Local UI state is only updated AFTER the server transaction commits.
+    const invDate = data.date && typeof data.date === 'string' && data.date.trim() !== '' ? data.date : formatJalaliDate(getCurrentJalaliDate());
+    const newInvoiceId = `shop-inv-${Date.now()}`;
+    const invNumber = `INV-${1000 + this.shopInvoices.length + 1}`;
 
-    for (const item of data.items) {
-      const prod = this.products.find((p) => p.id === item.productId);
-      if (!prod) {
-        return { success: false, error: `کالای موردنظر با شناسه ${item.productId} یافت نشد.` };
-      }
-      if (prod.stock < item.quantity) {
+    let serverInvoice: any = null;
+    try {
+      const res = await fetch('/api/finance/invoices', {
+        method: 'POST',
+        headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          id: newInvoiceId,
+          invoiceNumber: invNumber,
+          athleteId: data.athleteId,
+          athleteName: data.athleteName || athlete.fullName,
+          creatorId: data.creatorId,
+          creatorName: data.creatorName,
+          date: invDate,
+          items: data.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          paymentMethod: data.paymentMethod,
+          notes: data.notes,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
         return {
           success: false,
-          error: `موجودی کالای "${prod.name}" کافی نیست (موجودی فعلی: ${prod.stock}، درخواستی: ${item.quantity}).`,
+          error: json?.error || `ثبت فاکتور در سرور ناموفق بود (کد ${res.status}). هیچ تغییری اعمال نشد.`,
         };
       }
-
-      const itemTotal = prod.price * item.quantity;
-      totalAmount += itemTotal;
-
-      invoiceItems.push({
-        id: `inv-item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        productId: prod.id,
-        productName: prod.name,
-        category: prod.category,
-        unitPrice: prod.price,
-        quantity: item.quantity,
-        totalPrice: itemTotal,
-      });
+      serverInvoice = json.invoice;
+    } catch (e: any) {
+      return {
+        success: false,
+        error: 'امکان ارتباط با سرور وجود ندارد؛ فاکتور ثبت نشد. لطفاً اتصال شبکه را بررسی کنید.',
+      };
     }
 
-    // Deduct stock from products
+    // ---- Server COMMITTED. Mirror the authoritative result into local UI state.
+    const invoiceItems: ShopInvoiceItem[] = (serverInvoice.items || []).map((it: any, i: number) => ({
+      id: it.id || `${newInvoiceId}-item-${i}`,
+      productId: it.productId,
+      productName: it.productName,
+      category: it.category || '',
+      unitPrice: Number(it.unitPrice) || 0,
+      quantity: Number(it.quantity) || 1,
+      totalPrice: Number(it.totalPrice) || 0,
+    }));
+    const totalAmount = Number(serverInvoice.totalAmount) || 0;
+
+    // Reflect the committed stock decrement locally
     for (const item of data.items) {
       const prod = this.products.find((p) => p.id === item.productId);
       if (prod) {
         prod.stock -= item.quantity;
         prod.updatedAt = formatJalaliDate(getCurrentJalaliDate());
+        this.markPendingUpsert('products', prod);
       }
     }
 
-    const invDate = data.date && typeof data.date === 'string' && data.date.trim() !== '' ? data.date : formatJalaliDate(getCurrentJalaliDate());
-    const invNumber = `INV-${1000 + this.shopInvoices.length + 1}`;
-
     const newInvoice: ShopInvoice = {
-      id: `shop-inv-${Date.now()}`,
-      invoiceNumber: invNumber,
+      id: serverInvoice.id || newInvoiceId,
+      invoiceNumber: serverInvoice.invoiceNumber || invNumber,
       athleteId: data.athleteId,
       athleteName: data.athleteName || athlete.fullName,
       creatorId: data.creatorId,
@@ -2844,13 +2933,14 @@ class StorageEngine {
     };
 
     this.shopInvoices.unshift(newInvoice);
+    this.markPendingUpsert('shopInvoices', newInvoice);
 
     const itemsSummary = invoiceItems.map((i) => `${i.productName} (${i.quantity} عدد)`).join('، ');
-    const invNumOnly = invNumber.replace(/^INV-/i, '');
+    const invNumOnly = (serverInvoice.invoiceNumber || invNumber).replace(/^INV-/i, '');
 
-    // 1. Charge record on user's account ledger (بدهکار / منظور به حساب شخص)
+    // 1. Charge record on user's account ledger
     const chargeTx: FinancialTransaction = {
-      id: `tx-shop-charge-${Date.now()}`,
+      id: `${serverInvoice.id}-charge`,
       userId: athlete.id,
       userName: athlete.fullName,
       userNationalId: athlete.nationalId || '',
@@ -2863,11 +2953,12 @@ class StorageEngine {
       createdBy: data.creatorName || 'مسئول فروشگاه',
     };
     this.transactions.unshift(chargeTx);
+    this.markPendingUpsert('transactions', chargeTx);
 
-    // 2. If cash/instant payment, also add payment record (بستانکار / تسویه فاکتور)
+    // 2. If cash/instant payment, also add settlement record; otherwise a debtor record
     if (data.paymentMethod === 'cash') {
       const payTx: FinancialTransaction = {
-        id: `tx-shop-pay-${Date.now() + 1}`,
+        id: `${serverInvoice.id}-pay`,
         userId: athlete.id,
         userName: athlete.fullName,
         userNationalId: athlete.nationalId || '',
@@ -2880,10 +2971,10 @@ class StorageEngine {
         createdBy: data.creatorName || 'مسئول فروشگاه',
       };
       this.transactions.unshift(payTx);
+      this.markPendingUpsert('transactions', payTx);
     } else {
-      // Create debtor record for unpaid invoice
       const debtorRecord: DebtorRecord = {
-        id: `debt-${Date.now()}`,
+        id: `debt-${serverInvoice.id}`,
         userId: athlete.id,
         fullName: athlete.fullName,
         nationalId: athlete.nationalId || '',
@@ -2896,6 +2987,7 @@ class StorageEngine {
         notes: `بابت فاکتور ${invNumOnly}`,
       };
       this.debtors.unshift(debtorRecord);
+      this.markPendingUpsert('debtors', debtorRecord);
     }
 
     // Add Notification to athlete
@@ -2903,7 +2995,7 @@ class StorageEngine {
       id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       userId: athlete.id,
       title: 'فاکتور جدید فروشگاه صادر شد',
-      message: `فاکتور شماره ${invNumber} به مبلغ ${totalAmount.toLocaleString('fa-IR')} تومان ثبت گردید (${data.paymentMethod === 'cash' ? 'تسویه شده' : 'نسیه / تسویه نشده'}).`,
+      message: `فاکتور شماره ${serverInvoice.invoiceNumber || invNumber} به مبلغ ${totalAmount.toLocaleString('fa-IR')} تومان ثبت گردید (${data.paymentMethod === 'cash' ? 'تسویه شده' : 'نسیه / تسویه نشده'}).`,
       category: 'financial',
       isRead: false,
       createdAt: invDate,

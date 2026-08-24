@@ -78,7 +78,7 @@
 
 ## Phase 2 — Persistence (ادامه)
 - [x] Transactions اتمیک در مسیر sync
-- [ ] جدا کردن CRUD عادی از full-state sync (Enrollment/Attendance/Debtor/Creditor endpoints کامل)
+- [x] جدا کردن CRUD عادی از full-state sync — endpointهای مستقل جدید: POST /api/courses/enrollments (ظرفیت اتمیک با FOR UPDATE)، DELETE /api/courses/enrollments/:id (soft cancel)، POST /api/courses/attendance/batch (upsert اتمیک)، POST /api/finance/invoices (فاکتور+آیتم+کاهش موجودی شرطی+ledger در یک Transaction)
 - [ ] سختسازی `saveUser`/`updateUserVersioned` در برابر password خالی
 - [ ] یکسانسازی الگوی خطاها (400 Validation / 401 AuthN / 403 AuthZ / 409 Conflict / 500 Server) در همه routeها
 - [ ] Graceful shutdown: `pool.end()` روی SIGTERM/SIGINT
@@ -88,16 +88,20 @@
 - [x] Version + 409 روی users (REST)
 - [ ] تعمیم Optimistic Locking به enrollments/transactions/attendance/products/debtors/creditors
 - [x] Idempotency سمت سرور برای transactions
-- [ ] اتصال ثبت تراکنش/فاکتور فرانت به REST مستقل (استفاده واقعی از Idempotency-Key)
+- [x] اتصال ثبت تراکنش فرانت به REST مستقل (`addTransaction` → POST /api/finance/transactions با هدر Idempotency-Key = trx.id)
+- [x] اتصال ثبت فاکتور فرانت به REST مستقل (`createShopInvoice` → POST /api/finance/invoices؛ کاهش موجودی اتمیک سمت سرور ⇒ oversell/negative stock غیرممکن)
+- [x] اتصال Enrollment فرانت به REST مستقل (`enrollAthlete` → POST + `cancelEnrollment` → DELETE soft)
 - [ ] Idempotency برای Enrollment و Attendance
 
 ## Phase 4 — Frontend Data Flow (ادامه)
 - [x] حفظ داده در خطا + Merge محافظ
-- [ ] await کردن fetchهای fire-and-forget در متدهای Mutation
-- [ ] نمایش «ذخیره شد» فقط بعد از پاسخ 2xx واقعی سرور (C9 کامل)
+- [x] Server-first برای مهمترین جریان مالی: `createShopInvoice` حالا async واقعی است — قیمت/موجودی از DB سرور، state محلی فقط بعد از COMMIT آپدیت میشود، خطای شبکه/422 ⇒ هیچ تغییری محلی اعمال نمیشود + پیام دقیق به UI (C9 حل شد برای فروشگاه)
+- [x] Caller سازگار: `handleConfirmAndCreateInvoice` در ShopExpensesView با await
+- [ ] await کردن بقیه fetchهای fire-and-forget (addUser/addProduct/...)
+- [ ] نمایش «ذخیره شد» فقط بعد از پاسخ 2xx در سایر جریانها (کاربران، حضور، ثبتنام toastها)
 - [ ] کاهش payload `updateUserProfile`/`updateUser` به فیلدهای مجاز (whitelist)
 - [ ] حالت Offline/Error در UI با Retry کنترلشده (بنر قطع ارتباط + صف تغییرات)
-- [ ] حذف کامل وابستگی عملیات عادی به `saveAll()/syncWithBackendMySql()`
+- [ ] حذف کامل fallback `saveAll()` از مسیرهایی که REST مستقل دارند
 
 ## Phase 5 — Security (ادامه)
 - [x] Credential Management + PII Strip + JWT سختگیرانه
@@ -135,9 +139,9 @@
 | Phase 0 — Audit | ✅ تکمیل | 100% |
 | حذف FileStore | ✅ تکمیل | 100% |
 | Phase 1 — Database Integrity | 🔶 در جریان | ~60% |
-| Phase 2 — Persistence | 🔶 در جریان | ~70% |
-| Phase 3 — Concurrency | 🔶 هسته تکمیل | ~80% |
-| Phase 4 — Frontend Data Flow | 🔶 بخش بحرانی | ~55% |
+| Phase 2 — Persistence | 🔶 در جریان | ~85% |
+| Phase 3 — Concurrency | 🔶 هسته تکمیل | ~90% |
+| Phase 4 — Frontend Data Flow | 🔶 در جریان | ~70% |
 | Phase 5 — Security | 🔶 بخش بحرانی | ~60% |
 | Phase 6 — Backup & Recovery | ⬜ شروع نشده | 0% |
 | Phase 7 — Testing | ⬜ نیازمند محیط اجرا | 0% |
