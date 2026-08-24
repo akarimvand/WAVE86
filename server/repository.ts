@@ -324,12 +324,34 @@ export class SyncRepository {
     const columns = ['id', 'key_name', 'title', 'description', 'permissions', 'isSystem'];
     const updateCols = ['title', 'description', 'permissions'];
 
+    // Normalize permissions to a SINGLE-encoded JSON document.
+    // Historically this column suffered runaway double-encoding: every sync
+    // re-stringified an already-stringified JSON string, doubling the escape
+    // sequences each pass until each role row reached ~8MB (56MB dump).
+    const normalizePermissions = (raw: unknown): string => {
+      let value = raw ?? [];
+      let depth = 0;
+      while (typeof value === 'string' && depth < 10) {
+        try {
+          const parsed = JSON.parse(value);
+          value = parsed;
+          depth++;
+          if (typeof value !== 'string') break;
+        } catch {
+          break; // plain string payload — treat below
+        }
+      }
+      if (typeof value === 'string') return JSON.stringify([value]);
+      if (value === null || typeof value !== 'object') return '[]';
+      return JSON.stringify(value);
+    };
+
     const rows = roles.map((r) => [
       r.id,
       r.key || r.key_name || r.id,
       r.title || '',
       r.description || '',
-      JSON.stringify(r.permissions || []),
+      normalizePermissions(r.permissions),
       r.isSystem ? 1 : 0,
     ]);
 

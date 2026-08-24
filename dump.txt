@@ -1,0 +1,21 @@
+== bytes per table (desc) ==
+roles                        56.00 MB | rows~ NaN
+users                         0.03 MB | rows~ NaN
+pre_registrations             0.03 MB | rows~ NaN
+audit_logs                    0.02 MB | rows~ NaN
+user_roles                    0.01 MB | rows~ NaN
+enrollments                   0.00 MB | rows~ NaN
+shop_invoice_items            0.00 MB | rows~ NaN
+transactions                  0.00 MB | rows~ NaN
+shop_invoices                 0.00 MB | rows~ NaN
+courses                       0.00 MB | rows~ NaN
+club_settings                 0.00 MB | rows~ NaN
+debtors                       0.00 MB | rows~ NaN
+schema_migrations             0.00 MB | rows~ NaN
+total MB: 56.12 | lines: 1194
+== sample giant lines (>500KB) ==
+roles | 8.00 MB | ('role-accountant', 'accountant', 'حسابدار', 'مدیریت فاکتورها، صندوق، بدهکاران و بستانکاران', '\"\\\"\\\\\\\"\\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\
+roles | 8.00 MB | ('role-admin', 'admin', 'مدیر مجموعه', 'مدیریت کاربران، امور ورزشی و مالی', '\"\\\"\\\\\\\"\\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\
+roles | 8.00 MB | ('role-athlete', 'athlete', 'ورزشکار', 'صعود، ثبت کلاس، پرداخت شهریه و مشاهده تاریخچه', '\"\\\"\\\\\\\"\\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\\\\\\\
+roles | 8.00 MB | ('role-coach', 'coach', 'مربی', 'ارزیابی فنی، ثبت حضور غیاب کارآموزان', '\"\\\"\\\\\\\"\\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\\\\\
+roles | 8.00 MB | ('role-parent', 'parent', 'والدین', 'پیگیری و مدیریت کامل فرزندان ثبت‌نام شده', '\"\\\"\\\\\\\"\\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
