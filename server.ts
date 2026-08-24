@@ -2,9 +2,10 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { getMySqlPool } from './server/db';
+import { getMySqlPool, closeMySqlPool } from './server/db';
 import { ensureAllTablesExist } from './server/mysql';
 import { runMigrations } from './server/migrations';
+import { startBackupScheduler } from './server/backupScheduler';
 import { configureSecurityMiddlewares, errorHandler } from './server/middleware';
 
 // Route modules
@@ -93,20 +94,35 @@ async function startServer() {
   }
 
   // 7. Start Listening
-  app.listen(PORT, '0.0.0.0', async () => {
+  const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`[Server] Climbing Club Backend running at http://0.0.0.0:${PORT}`);
 
-    // Auto-bootstrap MySQL tables in background
+    // Auto-bootstrap MySQL tables + migrations + backup scheduler in background
     try {
       const pool = getMySqlPool();
       await ensureAllTablesExist(pool);
       console.log('[Server] MySQL schema checked and verified successfully.');
       const migrationResult = await runMigrations(pool);
       console.log(`[Server] Migrations applied=${migrationResult.applied.length} skipped=${migrationResult.skipped.length}`);
+      startBackupScheduler();
     } catch (e: any) {
       console.warn('[Server] MySQL initial connection warning:', e.message || e);
     }
   });
+
+  // 8. Graceful Shutdown — no leaked connections on SIGTERM/SIGINT
+  const shutdown = async (signal: string) => {
+    console.log(`[Server] ${signal} received — shutting down gracefully...`);
+    try {
+      await closeMySqlPool();
+    } finally {
+      server.close(() => process.exit(0));
+      // Hard-exit safety net if close hangs
+      setTimeout(() => process.exit(0), 5000).unref();
+    }
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer().catch((err) => {

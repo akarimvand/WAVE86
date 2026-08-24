@@ -76,6 +76,20 @@ export function resetInstallation() {
   currentConfig = null;
 }
 
+/**
+ * Graceful shutdown helper: closes all pooled connections so the process can
+ * exit cleanly on SIGTERM/SIGINT without hanging or leaking connections.
+ */
+export async function closeMySqlPool(): Promise<void> {
+  if (pool) {
+    const p = pool;
+    pool = null;
+    currentConfig = null;
+    await p.end().catch(() => {});
+    console.log('[DB] MySQL connection pool closed.');
+  }
+}
+
 export function reinitializePool(newConfig?: DbConfig): mysql.Pool {
   if (pool) {
     pool.end().catch(() => {});

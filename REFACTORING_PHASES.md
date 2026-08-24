@@ -79,9 +79,9 @@
 ## Phase 2 — Persistence (ادامه)
 - [x] Transactions اتمیک در مسیر sync
 - [x] جدا کردن CRUD عادی از full-state sync — endpointهای مستقل جدید: POST /api/courses/enrollments (ظرفیت اتمیک با FOR UPDATE)، DELETE /api/courses/enrollments/:id (soft cancel)، POST /api/courses/attendance/batch (upsert اتمیک)، POST /api/finance/invoices (فاکتور+آیتم+کاهش موجودی شرطی+ledger در یک Transaction)
-- [ ] سختسازی `saveUser`/`updateUserVersioned` در برابر password خالی
+- [x] سختسازی password خالی: `updateUserVersioned` دیگر هش موجود را با '' پاک نمیکند (`IF(? IS NULL OR ?='', password, ?)`) — saveUser از قبل guard داشت
 - [ ] یکسانسازی الگوی خطاها (400 Validation / 401 AuthN / 403 AuthZ / 409 Conflict / 500 Server) در همه routeها
-- [ ] Graceful shutdown: `pool.end()` روی SIGTERM/SIGINT
+- [x] Graceful shutdown: `closeMySqlPool()` + server.close روی SIGTERM/SIGINT با safety-net timeout
 - [ ] بازبینی `multipleStatements: true` در پول `server/mysql.ts`
 
 ## Phase 3 — Concurrency (ادامه - پوشش کامل)
@@ -111,12 +111,13 @@
 - [ ] اجبار تغییر رمز در اولین ورود ادمین seed (mustChangePassword)
 - [ ] بازبینی دقیق تفکیک دسترسی نقشها
 
-## Phase 6 — Backup & Recovery ⬜ (شروع نشده)
-- [ ] Backup روزانه خودکار (MySQL → Local + Remote)
-- [ ] Retention: ۷ نسخه روزانه / ۴ هفتگی / ۳ ماهانه
-- [ ] نگهداری نسخه پشتیبان خارج از سرور اصلی
-- [ ] اسکریپت تست Restore روی MySQL جدا
-- [ ] تعریف و مستندسازی RPO و RTO
+## Phase 6 — Backup & Recovery 🔶 (پیادهسازی کامل؛ تست اجرایی باقی است)
+- [x] Backup خودکار دوره‌ای (`server/backupScheduler.ts` — interval از env، اولین اجرا بعد از boot)
+- [x] پوشش هر ۲۰ جدول کسبوکار در خروجی JSON
+- [x] Retention: ۷ روزانه کامل + جدیدترینِ ۴ هفته + جدیدترینِ ۳ ماه + حذف خودکار مابقی
+- [x] مقصد دوم خارج از سرور: `BACKUP_REMOTE_DIR` (NAS/دیسک دوم/پوشه Sync)
+- [x] مستندات کامل RPO/RTO + ماتریس Retention + دو روش Restore + چکلیست تأیید (`BACKUP_RECOVERY.md`)
+- [ ] اجرای واقعی Test 8 — Restore روی MySQL جدا (نیازمند محیط اجرا)
 
 ## Phase 7 — Testing ⬜ (نیازمند محیط اجرا: npm install + MySQL زنده)
 - [ ] Test 1 — قطع اینترنت حین Save: UI نباید Saved نشان دهد؛ Retry دوباره ثبت نکند
@@ -139,11 +140,11 @@
 | Phase 0 — Audit | ✅ تکمیل | 100% |
 | حذف FileStore | ✅ تکمیل | 100% |
 | Phase 1 — Database Integrity | 🔶 در جریان | ~60% |
-| Phase 2 — Persistence | 🔶 در جریان | ~85% |
+| Phase 2 — Persistence | 🔶 در جریان | ~90% |
 | Phase 3 — Concurrency | 🔶 هسته تکمیل | ~90% |
 | Phase 4 — Frontend Data Flow | 🔶 در جریان | ~70% |
 | Phase 5 — Security | 🔶 بخش بحرانی | ~60% |
-| Phase 6 — Backup & Recovery | ⬜ شروع نشده | 0% |
+| Phase 6 — Backup & Recovery | 🔶 پیادهسازی کامل | ~85% |
 | Phase 7 — Testing | ⬜ نیازمند محیط اجرا | 0% |
 
 > **یادداشت:** موارد «زیرساخت آماده ✓» در Phase 7 یعنی کد سمت سرور/کلاینت پیاده شده اما اجرای واقعی تست نیازمند نصب وابستگیها (`npm install`) و MySQL فعال است.
