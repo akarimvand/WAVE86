@@ -2,7 +2,8 @@
 
 > **این فایل زنده است.** هر مورد که کامل شود با `[x]` تیک میخورد.
 > گزارش کامل یافتهها: [`AUDIT.md`](./AUDIT.md)
-> آخرین بهروزرسانی: 2026-08-24
+> رویه پشتیبانگیری و بازیابی: [`BACKUP_RECOVERY.md`](./BACKUP_RECOVERY.md)
+> آخرین بهروزرسانی: 2026-08-24 — نسخه ۳
 
 ---
 
@@ -62,6 +63,14 @@
 - [x] PII Filtering در `GET /api/mysql/full-data` برای غیرکارمندان و ناشناسان
 - [x] حذف JWT_SECRET ثابت → env الزامی + fallback تصادفی ephemeral
 - [x] پسورد seed ادمین بهصورت bcrypt hash ذخیره میشود
+
+## Phase 6 — Backup & Recovery ✅ (پیادهسازی؛ تست اجرایی در Phase 7)
+- [x] `server/backupScheduler.ts` — بکآپ خودکار دوره‌ای (`BACKUP_INTERVAL_HOURS`، پیشفرض ۲۴h) + اولین اجرا بعد از boot
+- [x] پوشش کامل هر ۲۰ جدول کسبوکار در خروجی JSON (خرابی یک جدول کل backup را نمیشکند)
+- [x] Retention طبق مأموریت: ۷ روزانه کامل + جدیدترینِ ۴ هفته + جدیدترینِ ۳ ماه + حذف خودکار مابقی
+- [x] مقصد دوم خارج از سرور: env `BACKUP_REMOTE_DIR` (NAS / دیسک دوم / پوشه Sync)
+- [x] Graceful Shutdown: `closeMySqlPool()` + `server.close()` روی SIGTERM/SIGINT با safety-net timeout (رفع M3)
+- [x] مستندات `BACKUP_RECOVERY.md`: RPO ≤ 24h (تنظیمپذیر تا 15min) / RTO ≤ 1h / دو روش Restore / چکلیست تأیید
 
 ---
 
