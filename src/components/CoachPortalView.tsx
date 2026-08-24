@@ -28,14 +28,14 @@ export const CoachPortalView: React.FC<CoachPortalViewProps> = ({ currentUser })
 
     if (selectedSession) {
       const allEnrollments = dbStore.getEnrollments();
-      setEnrollments(allEnrollments.filter(e => e.sessionId === selectedSession.id && e.paymentStatus === 'paid'));
+      setEnrollments(allEnrollments.filter(e => e.sessionId === selectedSession.id && e.status === 'active' && e.paymentStatus === 'paid'));
     }
   };
 
   const handleSelectSession = (session: TrainingSession) => {
     setSelectedSession(session);
     const allEnrollments = dbStore.getEnrollments();
-    setEnrollments(allEnrollments.filter(e => e.sessionId === session.id && e.paymentStatus === 'paid'));
+    setEnrollments(allEnrollments.filter(e => e.sessionId === session.id && e.status === 'active' && e.paymentStatus === 'paid'));
   };
 
   return (

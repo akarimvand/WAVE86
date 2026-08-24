@@ -240,16 +240,21 @@ router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin
 router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req: AuthenticatedRequest, res, next) => {
   const targetId = req.params.id;
   const hard = String(req.query.mode || '').toLowerCase() === 'hard';
+  const actor = req.user?.username || req.user?.fullName || '?';
+  console.log(`[EnrollmentDelete] START id=${targetId} mode=${hard ? 'HARD' : 'soft-cancel'} by=${actor}`);
   try {
     const pool = getMySqlPool();
     const nowIso = new Date().toISOString();
 
     if (!hard) {
       // Soft cancel — default
-      await pool.query(
+      const [resUpdate]: any = await pool.query(
         "UPDATE enrollments SET status = 'canceled', updatedAt = ? WHERE id = ? AND status != 'canceled'",
         [nowIso, targetId]
       );
+      if (!resUpdate.affectedRows) {
+        console.warn(`[EnrollmentDelete] SOFT miss — id=${targetId} not found or already canceled`);
+      }
       await writeAudit(pool, {
         userId: req.user?.id,
         userName: req.user?.username || req.user?.fullName,
@@ -260,6 +265,7 @@ router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 
         newValue: { status: 'canceled' },
         ...getRequestInfo(req),
       });
+      console.log(`[EnrollmentDelete] DONE soft id=${targetId} affected=${resUpdate.affectedRows}`);
       return res.json({ success: true, message: 'ثبت‌نام با موفقیت لغو شد.', mode: 'cancel' });
     }
 
@@ -311,7 +317,9 @@ router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 
     });
 
     res.json({ success: true, message: 'ثبت‌نام و سوابق مرتبط به‌طور کامل حذف شد.', mode: 'hard' });
+    console.log(`[EnrollmentDelete] DONE hard id=${targetId} (row + attendance + pending debts cascaded) by=${actor}`);
   } catch (err: any) {
+    console.error(`[EnrollmentDelete] FAILED id=${targetId} mode=${hard ? 'HARD' : 'soft'} —`, err.message || err);
     if (err.status) {
       return res.status(err.status).json({ success: false, error: err.message });
     }

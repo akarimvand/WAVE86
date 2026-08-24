@@ -8,46 +8,18 @@
 [Server] MySQL schema checked and verified successfully.
 [Server] Migrations applied=0 skipped=1
 [BackupScheduler] Active — interval 24h, local=C:\xampp\htdocs\WAVE86\backups\auto, remote=NOT CONFIGURED (set BACKUP_REMOTE_DIR)
-[BackupScheduler] Backup created: moj_auto_daily_2026-08-24T12-22-41.json (57499.3 KB) local
-[API Error] POST /mysql/sync-detailed: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58875234,
-  length: 58875234,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[API Error] POST /mysql/sync-detailed: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58875234,
-  length: 58875234,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[2m3:53:32 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
-[2m3:53:40 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
-[2m3:53:54 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
-[2m3:55:50 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcheck-dup-enr.mjs[22m
-[2m3:55:50 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtest-dup-fix.mjs[22m
+[EnrollmentDelete] START id=audit-hard-1787575453892 mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=audit-hard-1787575453892 (row + attendance + pending debts cascaded) by=admin
+[EnrollmentDelete] START id=audit-soft-1787575453921 mode=soft-cancel by=admin
+[EnrollmentDelete] DONE soft id=audit-soft-1787575453921 affected=1
+[BackupScheduler] Backup created: moj_auto_daily_2026-08-24T12-44-53.json (57520.1 KB) local
+[EnrollmentDelete] START id=enr-1787575517211-jvqa mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-1787575517211-jvqa (row + attendance + pending debts cascaded) by=admin
+[EnrollmentDelete] START id=enr-1787575517232-mg37 mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-1787575517232-mg37 (row + attendance + pending debts cascaded) by=admin
+[EnrollmentDelete] START id=enr-1787575517193-r1vh mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-1787575517193-r1vh (row + attendance + pending debts cascaded) by=admin
+[Server] unhandledRejection (kept alive): EBUSY: resource busy or locked, watch 'C:\xampp\htdocs\WAVE86\__rzi_13652.1881.rartemp'
 [API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
     at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
     at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
@@ -60,8 +32,8 @@
     at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
     at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
     at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58879456,
-  length: 58879456,
+  expected: 58882784,
+  length: 58882784,
   limit: 52428800,
   type: 'entity.too.large'
 }
@@ -77,133 +49,39 @@
     at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
     at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
     at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58878827,
-  length: 58878827,
+  expected: 58881994,
+  length: 58881994,
   limit: 52428800,
   type: 'entity.too.large'
 }
-[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58879300,
-  length: 58879300,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58879772,
-  length: 58879772,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58880200,
-  length: 58880200,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58880149,
-  length: 58880149,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58884003,
-  length: 58884003,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-[API Error] POST /mysql/sync: PayloadTooLargeError: request entity too large
-    at readStream (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:163:17)
-    at getRawBody (C:\xampp\htdocs\WAVE86\node_modules\raw-body\index.js:116:12)
-    at read (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\read.js:79:3)
-    at jsonParser (C:\xampp\htdocs\WAVE86\node_modules\body-parser\lib\types\json.js:142:5)
-    at Layer.handle [as handle_request] (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\layer.js:95:5)
-    at trim_prefix (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:328:13)
-    at C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:286:9
-    at router.process_params (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:346:12)
-    at next (C:\xampp\htdocs\WAVE86\node_modules\express\lib\router\index.js:280:10)
-    at file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:1015:7
-    at async file:///C:/xampp/htdocs/WAVE86/node_modules/express-rate-limit/dist/index.mjs:835:5 {
-  expected: 58878203,
-  length: 58878203,
-  limit: 52428800,
-  type: 'entity.too.large'
-}
-node:internal/fs/watchers:321
-    const error = new UVException({
-                  ^
-
-Error: EBUSY: resource busy or locked, watch 'C:\xampp\htdocs\WAVE86\WAVE86.zip'
-    at FSWatcher.<computed> (node:internal/fs/watchers:321:19)
-    at Object.watch (node:fs:2548:36)
-    at createFsWatchInstance (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22195:17)
-    at setFsWatchListener (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22242:15)
-    at NodeFsHandler._watchWithNodeFs (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22397:14)
-    at NodeFsHandler._handleFile (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22461:23)
-    at NodeFsHandler._addToNodeFs (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22703:21)
-Emitted 'error' event on FSWatcher instance at:
-    at FSWatcher._handleError (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:23896:10)
-    at NodeFsHandler._addToNodeFs (C:\xampp\htdocs\WAVE86\node_modules\vite\dist\node\chunks\dep-Dm0c1Wj2.js:22711:18) {
-  errno: -4082,
-  syscall: 'watch',
-  code: 'EBUSY',
-  path: 'C:\\xampp\\htdocs\\WAVE86\\WAVE86.zip',
-  filename: 'C:\\xampp\\htdocs\\WAVE86\\WAVE86.zip'
-}
-
-Node.js v24.16.0
+[Server] unhandledRejection (kept alive): EBUSY: resource busy or locked, watch 'C:\xampp\htdocs\WAVE86\oytblnmz_mouj (3).sql'
+[2m4:25:48 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css, /src/components/HeaderInboxModal.tsx, /src/components/ClubSettingsView.tsx, /src/components/SportsInsuranceView.tsx, /src/components/Phase1RolesPermissions.tsx, /src/components/Sidebar.tsx, /src/components/CoachPortalView.tsx, /src/components/PreRegistrationAdminPanel.tsx, /src/components/SyncDiagnosticsModal.tsx, /src/components/PreRegistrationPublicForm.tsx, /src/components/ShopExpensesView.tsx, /src/components/SupportTicketingView.tsx, /src/components/SessionsManagementView.tsx, /src/components/DataExportView.tsx, /src/components/FinancialAccountingView.tsx, /src/components/AttendanceTrackerView.tsx, /src/components/AdminAnalyticsDashboard.tsx, /src/components/FinancialDashboardView.tsx, /src/components/UserPortalCoursesView.tsx, /src/components/SmsManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ZipProfilePhotoImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ExcelPreRegImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DataImportManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Member360Modal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AthleteImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ProductDetailModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\EditEnrollmentModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ProductImporterModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DigitalMembershipCardModal.tsx[22m
+[2m4:26:01 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/SessionsManagementView.tsx, /src/index.css[22m
+[2m4:26:15 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/CoachPortalView.tsx, /src/index.css[22m
+[2m4:27:50 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mserver/mysql.ts[22m
+[EnrollmentDelete] START id=enr-final-1787576322277 mode=HARD by=admin
+[EnrollmentDelete] FAILED id=enr-final-1787576322277 mode=HARD — ثبت‌نام یافت نشد.
+[EnrollmentDelete] START id=enr-does-not-exist mode=HARD by=admin
+[EnrollmentDelete] FAILED id=enr-does-not-exist mode=HARD — ثبت‌نام یافت نشد.
+[EnrollmentDelete] START id=enr-soft-1787576323865 mode=soft-cancel by=admin
+[EnrollmentDelete] SOFT miss — id=enr-soft-1787576323865 not found or already canceled
+[EnrollmentDelete] DONE soft id=enr-soft-1787576323865 affected=0
+[EnrollmentDelete] START id=enr-final-1787576357728 mode=HARD by=admin
+[EnrollmentDelete] FAILED id=enr-final-1787576357728 mode=HARD — ثبت‌نام یافت نشد.
+[EnrollmentDelete] START id=enr-does-not-exist mode=HARD by=admin
+[EnrollmentDelete] FAILED id=enr-does-not-exist mode=HARD — ثبت‌نام یافت نشد.
+[EnrollmentDelete] START id=enr-soft-1787576359357 mode=soft-cancel by=admin
+[EnrollmentDelete] SOFT miss — id=enr-soft-1787576359357 not found or already canceled
+[EnrollmentDelete] DONE soft id=enr-soft-1787576359357 affected=0
+[EnrollmentDelete] START id=enr-final-1787576396656 mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-final-1787576396656 (row + attendance + pending debts cascaded) by=admin
+[EnrollmentDelete] START id=enr-does-not-exist mode=HARD by=admin
+[EnrollmentDelete] FAILED id=enr-does-not-exist mode=HARD — ثبت‌نام یافت نشد.
+[EnrollmentDelete] START id=enr-soft-1787576398357 mode=soft-cancel by=admin
+[EnrollmentDelete] DONE soft id=enr-soft-1787576398357 affected=1
+[EnrollmentDelete] START id=enr-1787576444522-7scz mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-1787576444522-7scz (row + attendance + pending debts cascaded) by=admin
+[EnrollmentDelete] START id=enr-1787576444544-pt5q mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-1787576444544-pt5q (row + attendance + pending debts cascaded) by=admin
+[EnrollmentDelete] START id=enr-1787576444506-2yss mode=HARD by=admin
+[EnrollmentDelete] DONE hard id=enr-1787576444506-2yss (row + attendance + pending debts cascaded) by=admin

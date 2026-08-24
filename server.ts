@@ -22,6 +22,16 @@ import uploadRoutes, { UPLOAD_DIR } from './server/routes/upload.routes';
 import installRoutes from './server/routes/install.routes';
 import syncRoutes from './server/routes/sync.routes';
 
+// Dev-resilience guard: an EBUSY/EPERM from the Vite file watcher (e.g. a
+// .zip being copied inside the project) used to emit an unhandled 'error'
+// event and kill the ENTIRE dev process — API included. Log and survive.
+process.on('uncaughtException', (err) => {
+  console.error('[Server] uncaughtException (kept alive):', err.message || err);
+});
+process.on('unhandledRejection', (err: any) => {
+  console.error('[Server] unhandledRejection (kept alive):', err?.message || err);
+});
+
 async function startServer() {
   const app = express();
   app.set('trust proxy', 1);

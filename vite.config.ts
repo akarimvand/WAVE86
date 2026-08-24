@@ -17,7 +17,9 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {
-        // Logs/backups must NEVER trigger a full page reload of the running app
+        // Logs/backups/archives must NEVER trigger reloads — and must never
+        // crash the server via EBUSY when a file is being written/copied
+        // (a WAVE86.zip copy operation killed the whole dev process once).
         ignored: [
           '**/*.txt',
           '**/*.log',
@@ -25,6 +27,11 @@ export default defineConfig(() => {
           '**/backups/**',
           '**/dist/**',
           '**/node_modules/**',
+          '**/*.zip',
+          '**/*.7z',
+          '**/*.rar',
+          '**/*.tmp',
+          '**/*.part',
         ],
       },
     },

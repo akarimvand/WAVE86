@@ -350,8 +350,18 @@ export const SessionsManagementView: React.FC<SessionsManagementViewProps> = () 
     }
 
     if (confirm(confirmMsg)) {
-      dbStore.deleteEnrollment(enrId, 'مدیر سیستم');
-      refreshData();
+      setIsSubmittingEnroll(true);
+      void (async () => {
+        const result = await dbStore.deleteEnrollment(enrId, 'مدیر سیستم');
+        if (!result.ok) {
+          // Server rejected definitively — state untouched, show the reason.
+          window.alert(`حذف انجام نشد: ${result.error}`);
+        } else if (result.queued) {
+          window.alert('اتصال برقرار نیست یا نشست منقضی شده است؛ حذف پس از بازگشت اتصال به‌صورت خودکار اعمال می‌شود.');
+        }
+        refreshData();
+        setIsSubmittingEnroll(false);
+      })();
     }
   };
 

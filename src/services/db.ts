@@ -1585,9 +1585,12 @@ class StorageEngine {
     }
   }
 
-  public deleteEnrollment(enrollmentId: string, actorName: string) {
+  public async deleteEnrollment(
+    enrollmentId: string,
+    actorName: string
+  ): Promise<{ ok: boolean; queued?: boolean; error?: string }> {
     const enr = this.enrollments.find((e) => e.id === enrollmentId);
-    if (!enr) return;
+    if (!enr) return { ok: false, error: 'این ثبت‌نام یافت نشد (احتمالاً قبلاً حذف شده است).' };
 
     // Collect related attendance ids BEFORE removal (for anti-resurrect merge)
     const removedAttendanceIds = this.attendanceRecords
@@ -1598,14 +1601,67 @@ class StorageEngine {
     const session = this.sessions.find((s) => s.id === enr.sessionId);
     const removedTxIds = new Set<string>();
     if (session) {
-      this.debtors = this.debtors.filter(
-        (d) => !(d.userId === enr.userId && d.category === 'tuition' && (d.categoryTitle || '').includes(session.title || ''))
-      );
+      this.debtors.forEach((d) => {
+        if (d.userId === enr.userId && d.category === 'tuition' && (d.categoryTitle || '').includes(session.title || '')) {
+          removedTxIds.add(d.id);
+        }
+      });
       this.transactions.forEach((t) => {
         if (t.userId === enr.userId && t.type === 'tuition' && (t.description || '').includes(session.title || '')) {
           removedTxIds.add(t.id);
         }
       });
+    }
+
+    // ── API-FIRST: the server is the single source of truth. Local state is
+    // only mutated AFTER the backend confirms the hard delete. On definitive
+    // rejection (400/404/409…) NOTHING changes locally and the caller shows
+    // the error. On retryable failures (offline / 5xx / 401 / 403) the delete
+    // is queued for automatic replay and applied optimistically.
+    const deletePath = `/api/courses/enrollments/${enrollmentId}?mode=hard`;
+    let res: Response | null = null;
+    try {
+      res = await fetch(deletePath, { method: 'DELETE', headers: this.getAuthHeaders() });
+    } catch {
+      res = null; // network down
+    }
+
+    if (!res || res.status >= 500 || res.status === 401 || res.status === 403) {
+      this.offlineQueue.push({ method: 'DELETE', path: deletePath });
+      console.warn(`[dbStore] Delete deferred (${res ? res.status : 'network'}) — queued (${this.offlineQueue.length} pending)`);
+      if (res && (res.status === 401 || res.status === 403)) {
+        try {
+          window.dispatchEvent(new CustomEvent('dbStoreMutationQueued', {
+            detail: { status: res.status, method: 'DELETE', path: deletePath },
+          }));
+        } catch {}
+      }
+      this.applyLocalEnrollmentDelete(enrollmentId, enr, removedAttendanceIds, removedTxIds, actorName);
+      return { ok: true, queued: true };
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      return { ok: false, error: body?.error || `حذف در سرور ناموفق بود (کد ${res.status}).` };
+    }
+
+    this.applyLocalEnrollmentDelete(enrollmentId, enr, removedAttendanceIds, removedTxIds, actorName);
+    return { ok: true };
+  }
+
+  /** Applies the already-server-confirmed deletion to local state (cascade). */
+  private applyLocalEnrollmentDelete(
+    enrollmentId: string,
+    enr: SessionEnrollment,
+    removedAttendanceIds: string[],
+    removedTxIds: Set<string>,
+    actorName: string
+  ): void {
+    const session = this.sessions.find((s) => s.id === enr.sessionId);
+    if (session) {
+      this.debtors = this.debtors.filter(
+        (d) => !(d.userId === enr.userId && d.category === 'tuition' && (d.categoryTitle || '').includes(session.title || ''))
+      );
       this.transactions = this.transactions.filter((t) => !removedTxIds.has(t.id));
     }
 
@@ -1619,9 +1675,6 @@ class StorageEngine {
     this.markPendingDelete('enrollments', enrollmentId);
     removedAttendanceIds.forEach((id) => this.markPendingDelete('attendanceRecords', id));
     removedTxIds.forEach((id) => this.markPendingDelete('transactions', id));
-
-    // Direct server-side HARD delete with cascade — offline-queue fallback.
-    this.sendMutation('DELETE', `/api/courses/enrollments/${enrollmentId}?mode=hard`);
 
     this.addAuditLog('admin', actorName, 'حذف کامل ثبت‌نام', 'Enrollment', enrollmentId, `حذف ثبت‌نام ${enr.athleteName} همراه سوابق حضور و اقساط مرتبط`);
   }
