@@ -1,0 +1,6 @@
+{
+  "name": "باشگاه سنگ‌نوردی موج - سیستم جامع مدیریت باشگاه",
+  "description": "سیستم جامع مدیریت باشگاه سنگ‌نوردی موج شامل مدیریت اعضا، مربیان، برنامه‌ها، بیمه ورزشی، مالی، حضور و غیاب و پنل والدین",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

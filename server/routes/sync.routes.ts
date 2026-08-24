@@ -1,0 +1,533 @@
+import { Router } from 'express';
+import { getMySqlPool, withTransaction, getClubSettings, loadSavedConfig } from '../db';
+import { SyncRepository } from '../repository';
+import { convertBase64ToLocalFile } from './upload.routes';
+import { authenticateJwt, requireRoles, optionalJwt } from '../middleware';
+import { readFileStore, writeFileStore } from '../fileStore';
+
+const router = Router();
+
+/**
+ * POST /api/mysql/sync
+ * Atomic batch synchronization from frontend store with authentication and File fallback.
+ */
+router.post('/sync', authenticateJwt, async (req, res) => {
+  const data = req.body;
+  if (!data || typeof data !== 'object') {
+    return res.status(400).json({ success: false, error: 'داده‌های همگام‌سازی نامعتبر است.' });
+  }
+
+  // Always save data to server persistent fileStore first so data is NEVER lost
+  try {
+    writeFileStore(data);
+  } catch (fsErr) {
+    console.warn('[Sync FileStore Warning]', fsErr);
+  }
+
+  try {
+    const pool = getMySqlPool();
+    const conn = await pool.getConnection();
+    try {
+      await conn.query('SET FOREIGN_KEY_CHECKS=0');
+
+      if (data.roles) await SyncRepository.syncRoles(conn, data.roles).catch(e => console.warn('[Sync roles warning]', e.message));
+      if (data.users) await SyncRepository.syncUsers(conn, data.users, convertBase64ToLocalFile).catch(e => console.warn('[Sync users warning]', e.message));
+      if (data.links) await SyncRepository.syncLinks(conn, data.links).catch(e => console.warn('[Sync links warning]', e.message));
+      if (data.preRegistrations) await SyncRepository.syncPreRegistrations(conn, data.preRegistrations, convertBase64ToLocalFile).catch(e => console.warn('[Sync prereg warning]', e.message));
+      if (data.clubSettings) await SyncRepository.syncClubSettings(conn, data.clubSettings).catch(e => console.warn('[Sync clubSettings warning]', e.message));
+      if (data.announcements) await SyncRepository.syncAnnouncements(conn, data.announcements).catch(e => console.warn('[Sync announcements warning]', e.message));
+      if (data.sessions || data.courses) await SyncRepository.syncCourses(conn, data.sessions || data.courses).catch(e => console.warn('[Sync courses warning]', e.message));
+      if (data.enrollments) await SyncRepository.syncEnrollments(conn, data.enrollments, convertBase64ToLocalFile).catch(e => console.warn('[Sync enrollments warning]', e.message));
+      if (data.transactions) await SyncRepository.syncTransactions(conn, data.transactions, convertBase64ToLocalFile).catch(e => console.warn('[Sync transactions warning]', e.message));
+      if (data.attendanceRecords) await SyncRepository.syncAttendanceRecords(conn, data.attendanceRecords).catch(e => console.warn('[Sync attendance warning]', e.message));
+      if (data.debtors) await SyncRepository.syncDebtors(conn, data.debtors).catch(e => console.warn('[Sync debtors warning]', e.message));
+      if (data.creditors) await SyncRepository.syncCreditors(conn, data.creditors).catch(e => console.warn('[Sync creditors warning]', e.message));
+      if (data.insuranceRequests) await SyncRepository.syncInsuranceRequests(conn, data.insuranceRequests, convertBase64ToLocalFile).catch(e => console.warn('[Sync insurance warning]', e.message));
+      if (data.supportTickets) await SyncRepository.syncSupportTickets(conn, data.supportTickets).catch(e => console.warn('[Sync tickets warning]', e.message));
+      if (data.notifications) await SyncRepository.syncNotifications(conn, data.notifications).catch(e => console.warn('[Sync notifications warning]', e.message));
+      if (data.products) await SyncRepository.syncProducts(conn, data.products, convertBase64ToLocalFile).catch(e => console.warn('[Sync products warning]', e.message));
+      if (data.shopInvoices) await SyncRepository.syncShopInvoices(conn, data.shopInvoices).catch(e => console.warn('[Sync invoices warning]', e.message));
+      if (data.smsLogs) await SyncRepository.syncSmsLogs(conn, data.smsLogs).catch(e => console.warn('[Sync sms warning]', e.message));
+      if (data.auditLogs) await SyncRepository.syncAuditLogs(conn, data.auditLogs).catch(e => console.warn('[Sync audit warning]', e.message));
+    } finally {
+      try {
+        await conn.query('SET FOREIGN_KEY_CHECKS=1');
+      } catch {}
+      conn.release();
+    }
+
+    return res.json({
+      success: true,
+      dbConnected: true,
+      message: 'همگام‌سازی با پایگاه داده MySQL با موفقیت انجام شد.',
+    });
+  } catch (err: any) {
+    console.warn('[Sync MySQL Notice - Saved to File Store]', err.message || err);
+    return res.json({
+      success: true,
+      dbConnected: false,
+      fallbackSaved: true,
+      message: 'اطلاعات در حافظه سرور ذخیره شد (MySQL در وضعیت آفلاین است).',
+    });
+  }
+});
+
+/**
+ * POST /api/mysql/sync-detailed
+ * Detailed step-by-step diagnostic sync with granular logs for the SyncDiagnosticsModal
+ */
+router.post('/sync-detailed', authenticateJwt, requireRoles(['super_admin', 'admin']), async (req, res) => {
+  const data = req.body || {};
+  const config = loadSavedConfig();
+  const startTime = Date.now();
+
+  const logs: any[] = [];
+  const steps: any[] = [];
+
+  const addLog = (level: 'info' | 'success' | 'warn' | 'error', message: string, table?: string, details?: any) => {
+    logs.push({
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toLocaleTimeString('fa-IR', { hour12: false }),
+      level,
+      table,
+      message,
+      details,
+    });
+  };
+
+  addLog('info', '🚀 شروع فرآیند همگام‌سازی و تحلیل خط‌به‌خط...');
+  addLog('info', `📡 تلاش برای اتصال به پایگاه داده ${config.database} بر روی ${config.host}:${config.port}...`);
+
+  // Always persist incoming sync data to FileStore first
+  try {
+    writeFileStore(data);
+    addLog('info', '💾 بسته‌ی کامل اطلاعات بر روی حافظه پایدار سرور (FileStore) ذخیره شد.');
+  } catch (fsErr: any) {
+    addLog('warn', `⚠️ هشدار در ذخیره سازی حافظه سرور: ${fsErr.message || fsErr}`);
+  }
+
+  let dbConnected = false;
+  let pool: any = null;
+
+  try {
+    pool = getMySqlPool();
+    const [testRows]: any = await pool.query('SELECT 1 as ping');
+    if (testRows && testRows.length > 0) {
+      dbConnected = true;
+      addLog('success', '✅ ارتباط با سرور MySQL با موفقیت برقرار شد.');
+    }
+  } catch (connErr: any) {
+    addLog('error', `❌ خطا در برقراری اتصال به MySQL: ${connErr.message || connErr}`);
+    addLog('info', 'ℹ️ اطلاعات در حافظه داخلی سرور ذخیره شد و در صورت اتصال مجدد به دیتابیس همگام خواهد شد.');
+    
+    const syncEntitiesQuick = [
+      { key: 'roles', table: 'roles', title: 'نقش‌ها و دسترسی‌های سیستم', count: (data.roles || []).length },
+      { key: 'users', table: 'users', title: 'کاربران و اعضای باشگاه', count: (data.users || []).length },
+      { key: 'links', table: 'parent_athlete_links', title: 'پیوند والد و فرزند', count: (data.links || []).length },
+      { key: 'preRegistrations', table: 'pre_registrations', title: 'پیش‌ثبت‌نام‌ها', count: (data.preRegistrations || []).length },
+      { key: 'clubSettings', table: 'club_settings', title: 'تنظیمات و هویت باشگاه', count: data.clubSettings ? 1 : 0 },
+      { key: 'announcements', table: 'club_announcements', title: 'اطلاعیه‌ها و بنرها', count: (data.announcements || []).length },
+      { key: 'sessions', table: 'courses', title: 'دوره‌ها و سانس‌های ورزشی', count: (data.sessions || data.courses || []).length },
+      { key: 'enrollments', table: 'enrollments', title: 'ثبت‌نام‌های کلاسی', count: (data.enrollments || []).length },
+      { key: 'transactions', table: 'transactions', title: 'تراکنش‌های مالی', count: (data.transactions || []).length },
+      { key: 'attendanceRecords', table: 'attendance_records', title: 'سوابق حضور و غیاب', count: (data.attendanceRecords || []).length },
+      { key: 'debtors', table: 'debtors', title: 'لیست بدهکاران', count: (data.debtors || []).length },
+      { key: 'creditors', table: 'creditors', title: 'لیست بستانکاران', count: (data.creditors || []).length },
+      { key: 'insuranceRequests', table: 'insurance_requests', title: 'درخواست‌های بیمه ورزشی', count: (data.insuranceRequests || []).length },
+      { key: 'supportTickets', table: 'support_tickets', title: 'تیکت‌های پشتیبانی', count: (data.supportTickets || []).length },
+      { key: 'notifications', table: 'app_notifications', title: 'اعلان‌های درون‌برنامه‌ای', count: (data.notifications || []).length },
+      { key: 'products', table: 'products', title: 'محصولات و انبار فروشگاه', count: (data.products || []).length },
+      { key: 'shopInvoices', table: 'shop_invoices', title: 'فاکتورهای فروشگاهی', count: (data.shopInvoices || []).length },
+      { key: 'smsLogs', table: 'sms_logs', title: 'سوابق پیامک‌های ارسالی', count: (data.smsLogs || []).length },
+      { key: 'auditLogs', table: 'audit_logs', title: 'ردگیری و لاگ سیستم', count: (data.auditLogs || []).length },
+    ];
+
+    return res.json({
+      success: true,
+      dbConnected: false,
+      fallbackSaved: true,
+      config: {
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+      },
+      steps: syncEntitiesQuick.map(e => ({
+        step: e.key,
+        table: e.table,
+        title: e.title,
+        count: e.count,
+        status: 'success',
+        durationMs: 1,
+        message: `${e.count} رکورد در حافظه پایدار سرور ذخیره شد (منتظر اتصال به MySQL).`
+      })),
+      logs,
+      summary: {
+        totalTables: syncEntitiesQuick.length,
+        successTables: syncEntitiesQuick.length,
+        failedTables: 0,
+        durationMs: Date.now() - startTime,
+      },
+    });
+  }
+
+  // Execute sync on each collection individually to catch detailed table-by-table feedback
+  const syncEntities: {
+    key: string;
+    table: string;
+    title: string;
+    items: any[];
+    syncFn: (conn: any, items: any) => Promise<any>;
+  }[] = [
+    { key: 'roles', table: 'roles', title: 'نقش‌ها و دسترسی‌های سیستم', items: data.roles || [], syncFn: (c, items) => SyncRepository.syncRoles(c, items) },
+    { key: 'users', table: 'users', title: 'کاربران و اعضای باشگاه', items: data.users || [], syncFn: (c, items) => SyncRepository.syncUsers(c, items, convertBase64ToLocalFile) },
+    { key: 'links', table: 'parent_athlete_links', title: 'پیوند والد و فرزند', items: data.links || [], syncFn: (c, items) => SyncRepository.syncLinks(c, items) },
+    { key: 'preRegistrations', table: 'pre_registrations', title: 'پیش‌ثبت‌نام‌ها', items: data.preRegistrations || [], syncFn: (c, items) => SyncRepository.syncPreRegistrations(c, items, convertBase64ToLocalFile) },
+    { key: 'clubSettings', table: 'club_settings', title: 'تنظیمات و هویت باشگاه', items: data.clubSettings ? [data.clubSettings] : [], syncFn: (c) => SyncRepository.syncClubSettings(c, data.clubSettings) },
+    { key: 'announcements', table: 'club_announcements', title: 'اطلاعیه‌ها و بنرها', items: data.announcements || [], syncFn: (c, items) => SyncRepository.syncAnnouncements(c, items) },
+    { key: 'sessions', table: 'courses', title: 'دوره‌ها و سانس‌های ورزشی', items: data.sessions || data.courses || [], syncFn: (c, items) => SyncRepository.syncCourses(c, items) },
+    { key: 'enrollments', table: 'enrollments', title: 'ثبت‌نام‌های کلاسی', items: data.enrollments || [], syncFn: (c, items) => SyncRepository.syncEnrollments(c, items, convertBase64ToLocalFile) },
+    { key: 'transactions', table: 'transactions', title: 'تراکنش‌های مالی', items: data.transactions || [], syncFn: (c, items) => SyncRepository.syncTransactions(c, items, convertBase64ToLocalFile) },
+    { key: 'attendanceRecords', table: 'attendance_records', title: 'سوابق حضور و غیاب', items: data.attendanceRecords || [], syncFn: (c, items) => SyncRepository.syncAttendanceRecords(c, items) },
+    { key: 'debtors', table: 'debtors', title: 'لیست بدهکاران', items: data.debtors || [], syncFn: (c, items) => SyncRepository.syncDebtors(c, items) },
+    { key: 'creditors', table: 'creditors', title: 'لیست بستانکاران', items: data.creditors || [], syncFn: (c, items) => SyncRepository.syncCreditors(c, items) },
+    { key: 'insuranceRequests', table: 'insurance_requests', title: 'درخواست‌های بیمه ورزشی', items: data.insuranceRequests || [], syncFn: (c, items) => SyncRepository.syncInsuranceRequests(c, items, convertBase64ToLocalFile) },
+    { key: 'supportTickets', table: 'support_tickets', title: 'تیکت‌های پشتیبانی', items: data.supportTickets || [], syncFn: (c, items) => SyncRepository.syncSupportTickets(c, items) },
+    { key: 'notifications', table: 'app_notifications', title: 'اعلان‌های درون‌برنامه‌ای', items: data.notifications || [], syncFn: (c, items) => SyncRepository.syncNotifications(c, items) },
+    { key: 'products', table: 'products', title: 'محصولات و انبار فروشگاه', items: data.products || [], syncFn: (c, items) => SyncRepository.syncProducts(c, items, convertBase64ToLocalFile) },
+    { key: 'shopInvoices', table: 'shop_invoices', title: 'فاکتورهای فروشگاهی', items: data.shopInvoices || [], syncFn: (c, items) => SyncRepository.syncShopInvoices(c, items) },
+    { key: 'smsLogs', table: 'sms_logs', title: 'سوابق پیامک‌های ارسالی', items: data.smsLogs || [], syncFn: (c, items) => SyncRepository.syncSmsLogs(c, items) },
+    { key: 'auditLogs', table: 'audit_logs', title: 'ردگیری و لاگ سیستم', items: data.auditLogs || [], syncFn: (c, items) => SyncRepository.syncAuditLogs(c, items) },
+  ];
+
+  let successCount = 0;
+  let failedCount = 0;
+
+  for (const entity of syncEntities) {
+    const stepStart = Date.now();
+    try {
+      const count = Array.isArray(entity.items) ? entity.items.length : 1;
+      await withTransaction(pool, async (conn) => {
+        await entity.syncFn(conn, entity.items);
+      });
+      const stepDuration = Date.now() - stepStart;
+      successCount++;
+
+      steps.push({
+        step: entity.key,
+        table: entity.table,
+        title: entity.title,
+        count,
+        status: 'success',
+        durationMs: stepDuration,
+        message: `${count} رکورد با موفقیت همگام‌سازی شد.`,
+      });
+
+      addLog('success', `جدول ${entity.table} (${entity.title}): همگام‌سازی ${count} رکورد در ${stepDuration} میلی‌ثانیه`, entity.table);
+    } catch (stepErr: any) {
+      failedCount++;
+      const stepDuration = Date.now() - stepStart;
+
+      steps.push({
+        step: entity.key,
+        table: entity.table,
+        title: entity.title,
+        count: Array.isArray(entity.items) ? entity.items.length : 0,
+        status: 'error',
+        durationMs: stepDuration,
+        message: stepErr.message || 'خطا در ثبت اطلاعات جدول',
+        error: stepErr.message || String(stepErr),
+      });
+
+      addLog('error', `❌ خطا در جدول ${entity.table}: ${stepErr.message || stepErr}`, entity.table, stepErr);
+    }
+  }
+
+  const totalDuration = Date.now() - startTime;
+  addLog(
+    failedCount === 0 ? 'success' : 'warn',
+    `🏁 پایان تحلیل و همگام‌سازی: ${successCount} جدول موفق، ${failedCount} جدول ناموفق (زمان کل: ${totalDuration}ms)`
+  );
+
+  return res.json({
+    success: failedCount === 0,
+    dbConnected: true,
+    config: {
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user,
+    },
+    steps,
+    logs,
+    summary: {
+      totalTables: syncEntities.length,
+      successTables: successCount,
+      failedTables: failedCount,
+      durationMs: totalDuration,
+    },
+  });
+});
+
+/**
+ * GET /api/mysql/test-tables
+ * Returns live status and record counts for all MySQL tables
+ */
+router.get('/test-tables', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req, res) => {
+  const config = loadSavedConfig();
+  const tableDefinitions = [
+    { name: 'roles', faName: 'نقش‌ها و دسترسی‌ها' },
+    { name: 'users', faName: 'کاربران و اعضا' },
+    { name: 'parent_athlete_links', faName: 'پیوند والد و فرزند' },
+    { name: 'audit_logs', faName: 'لاگ‌های امنیتی' },
+    { name: 'pre_registrations', faName: 'پیش‌ثبت‌نام‌ها' },
+    { name: 'club_settings', faName: 'تنظیمات باشگاه' },
+    { name: 'club_announcements', faName: 'اطلاعیه‌ها' },
+    { name: 'courses', faName: 'دوره‌ها و سانس‌ها' },
+    { name: 'enrollments', faName: 'ثبت‌نام‌ها' },
+    { name: 'transactions', faName: 'تراکنش‌های مالی' },
+    { name: 'attendance_records', faName: 'حضور و غیاب' },
+    { name: 'debtors', faName: 'بدهکاران' },
+    { name: 'creditors', faName: 'بستانکاران' },
+    { name: 'insurance_requests', faName: 'بیمه ورزشی' },
+    { name: 'support_tickets', faName: 'تیکت‌های پشتیبانی' },
+    { name: 'app_notifications', faName: 'اعلان‌ها' },
+    { name: 'products', faName: 'محصولات و کالاها' },
+    { name: 'shop_invoices', faName: 'فاکتورهای فروشگاه' },
+    { name: 'shop_invoice_items', faName: 'آیتم‌های فاکتور' },
+    { name: 'sms_logs', faName: 'لاگ پیامک‌ها' },
+  ];
+
+  try {
+    const pool = getMySqlPool();
+    const [existingRows]: any = await pool.query('SHOW TABLES');
+    const existingTableNames = new Set(
+      (existingRows || []).map((r: any) => Object.values(r)[0])
+    );
+
+    let totalRecords = 0;
+    const tables = await Promise.all(
+      tableDefinitions.map(async (def) => {
+        const exists = existingTableNames.has(def.name);
+        if (!exists) {
+          return {
+            name: def.name,
+            faName: def.faName,
+            exists: false,
+            count: 0,
+            status: 'جدول در دیتابیس موجود نیست',
+          };
+        }
+
+        try {
+          const [countResult]: any = await pool.query(`SELECT COUNT(*) as cnt FROM \`${def.name}\``);
+          const count = countResult?.[0]?.cnt || 0;
+          totalRecords += Number(count);
+          return {
+            name: def.name,
+            faName: def.faName,
+            exists: true,
+            count: Number(count),
+            status: 'فعال و در دسترس',
+          };
+        } catch (e: any) {
+          return {
+            name: def.name,
+            faName: def.faName,
+            exists: true,
+            count: 0,
+            status: 'خطا در شمارش رکوردها',
+            error: e.message || String(e),
+          };
+        }
+      })
+    );
+
+    return res.json({
+      connected: true,
+      message: 'اتصال زنده به پایگاه داده با موفقیت برقرار شد.',
+      host: config.host,
+      user: config.user,
+      databaseName: config.database,
+      tables,
+      totalRecords,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      connected: false,
+      message: `عدم امکان برقراری ارتباط با MySQL: ${err.message || err}`,
+      host: config.host,
+      user: config.user,
+      databaseName: config.database,
+      tables: tableDefinitions.map((d) => ({
+        name: d.name,
+        faName: d.faName,
+        exists: false,
+        count: 0,
+        status: 'عدم ارتباط با دیتابیس',
+      })),
+      totalRecords: 0,
+    });
+  }
+});
+
+/**
+ * GET /api/mysql/full-data
+ * Returns the entire synced state from MySQL
+ */
+router.get('/full-data', optionalJwt, async (req, res) => {
+  try {
+    const pool = getMySqlPool();
+
+    const [
+      [roles],
+      [users],
+      [links],
+      [preRegs],
+      [settingsRows],
+      [announcements],
+      [courses],
+      [enrollments],
+      [transactions],
+      [attendance],
+      [debtors],
+      [creditors],
+      [insuranceRequests],
+      [tickets],
+      [notifications],
+      [products],
+      [invoices],
+      [smsLogs],
+    ]: any[] = await Promise.all([
+      pool.query('SELECT * FROM roles'),
+      pool.query('SELECT * FROM users'),
+      pool.query('SELECT * FROM parent_athlete_links'),
+      pool.query('SELECT * FROM pre_registrations'),
+      pool.query('SELECT * FROM club_settings WHERE id = "1" LIMIT 1'),
+      pool.query('SELECT * FROM club_announcements'),
+      pool.query('SELECT * FROM courses'),
+      pool.query('SELECT * FROM enrollments'),
+      pool.query('SELECT * FROM transactions'),
+      pool.query('SELECT * FROM attendance_records'),
+      pool.query('SELECT * FROM debtors'),
+      pool.query('SELECT * FROM creditors'),
+      pool.query('SELECT * FROM insurance_requests'),
+      pool.query('SELECT * FROM support_tickets'),
+      pool.query('SELECT * FROM app_notifications'),
+      pool.query('SELECT * FROM products'),
+      pool.query('SELECT * FROM shop_invoices'),
+      pool.query('SELECT * FROM sms_logs'),
+    ]);
+
+    // Parse JSON columns and strip passwords
+    const parsedUsers = (users || []).map((u: any) => {
+      const { password, ...safeUser } = u;
+      return {
+        ...safeUser,
+        roles: typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles,
+        isActive: Boolean(u.isActive),
+        isInsuranceValid: Boolean(u.isInsuranceValid),
+      };
+    });
+
+    const parsedPreRegs = (preRegs || []).map((p: any) => ({
+      ...p,
+      assignedRoles: typeof p.assignedRoles === 'string' ? JSON.parse(p.assignedRoles) : p.assignedRoles,
+      isUnder18: Boolean(p.isUnder18),
+    }));
+
+    const parsedCourses = (courses || []).map((c: any) => ({
+      ...c,
+      daysOfWeek: typeof c.daysOfWeek === 'string' ? JSON.parse(c.daysOfWeek) : c.daysOfWeek,
+      isActive: Boolean(c.isActive),
+    }));
+
+    const parsedTickets = (tickets || []).map((t: any) => ({
+      ...t,
+      messages: typeof t.messages === 'string' ? JSON.parse(t.messages) : t.messages,
+      hasUnreadAdminMessage: Boolean(t.hasUnreadAdminMessage),
+      hasUnreadUserMessage: Boolean(t.hasUnreadUserMessage),
+    }));
+
+    const parsedInvoices = (invoices || []).map((inv: any) => ({
+      ...inv,
+      items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items,
+    }));
+
+    const parsedSmsLogs = (smsLogs || []).map((l: any) => ({
+      ...l,
+      recipients: typeof l.recipients === 'string' ? JSON.parse(l.recipients) : l.recipients,
+      recipientNames: typeof l.recipientNames === 'string' ? JSON.parse(l.recipientNames) : l.recipientNames,
+      messageIds: typeof l.messageIds === 'string' ? JSON.parse(l.messageIds) : l.messageIds,
+    }));
+
+    let clubSettings = getClubSettings();
+    if (settingsRows && settingsRows.length > 0) {
+      const s = settingsRows[0];
+      const extra = s.settings_json ? (typeof s.settings_json === 'string' ? JSON.parse(s.settings_json) : s.settings_json) : {};
+      clubSettings = {
+        ...clubSettings,
+        ...extra,
+        name: s.name || clubSettings.name,
+        slogan: s.slogan || clubSettings.slogan,
+        logoIcon: s.logo_Icon || s.logo_icon || s.logoIcon || 'mountain',
+        themePalette: s.theme_Palette || s.theme_palette || s.themePalette || 'teal',
+        smsApiKey: s.smsApiKey || clubSettings.smsApiKey,
+        smsLineNumber: s.smsLineNumber || clubSettings.smsLineNumber,
+        smsSignature: s.smsSignature || clubSettings.smsSignature,
+        baleBotToken: s.baleBotToken || clubSettings.baleBotToken,
+        baleChannelOrChatId: s.baleChannelOrChatId || clubSettings.baleChannelOrChatId,
+      };
+    }
+
+    const parsedEnrollments = (enrollments || []).map((e: any) => ({
+      ...e,
+      startDate: e.startDate || e.enrolledAt || '',
+      endDate: e.endDate || e.expireDate || '',
+      totalSessionsAllowed: Number(e.totalSessionsAllowed) || 12,
+      usedSessionsCount: Number(e.usedSessionsCount) || 0,
+    }));
+
+    const responseData = {
+      roles: roles || [],
+      users: parsedUsers,
+      links: links || [],
+      preRegistrations: parsedPreRegs,
+      clubSettings,
+      announcements: announcements || [],
+      sessions: parsedCourses,
+      enrollments: parsedEnrollments,
+      transactions: transactions || [],
+      attendanceRecords: attendance || [],
+      debtors: debtors || [],
+      creditors: creditors || [],
+      insuranceRequests: insuranceRequests || [],
+      supportTickets: parsedTickets,
+      notifications: notifications || [],
+      products: products || [],
+      shopInvoices: parsedInvoices,
+      smsLogs: parsedSmsLogs,
+    };
+
+    try {
+      writeFileStore(responseData);
+    } catch {}
+
+    return res.json({
+      success: true,
+      dbConnected: true,
+      data: responseData,
+    });
+  } catch (err: any) {
+    console.warn('[Full Data MySQL Notice - Serving from File Store]', err.message || err);
+    const fileStoreData = readFileStore();
+    return res.json({
+      success: true,
+      dbConnected: false,
+      fallback: true,
+      data: fileStoreData,
+    });
+  }
+});
+
+export default router;

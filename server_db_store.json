@@ -1,0 +1,125 @@
+{
+  "users": [],
+  "roles": [
+    {
+      "id": "role-admin",
+      "key": "admin",
+      "title": "مدیر کل (Admin)",
+      "description": "دسترسی نامحدود به تمامی بخش‌های سیستم و پیکربندی",
+      "permissions": [
+        "users:read",
+        "users:write",
+        "users:delete",
+        "preregistration:manage",
+        "insurance:manage",
+        "packages:read",
+        "packages:write",
+        "finance:read",
+        "finance:write",
+        "finance:reports",
+        "attendance:record",
+        "attendance:view_all",
+        "tickets:manage",
+        "announcements:manage"
+      ],
+      "isSystem": true
+    },
+    {
+      "id": "role-secretary",
+      "key": "secretary",
+      "title": "منشی باشگاه",
+      "description": "مدیریت ثبت‌نام، بیمه، حضور غیاب و پاسخ به تیکت‌ها",
+      "permissions": [
+        "users:read",
+        "users:write",
+        "preregistration:manage",
+        "insurance:manage",
+        "packages:read",
+        "attendance:record",
+        "attendance:view_all",
+        "tickets:manage"
+      ],
+      "isSystem": true
+    },
+    {
+      "id": "role-accountant",
+      "key": "accountant",
+      "title": "حسابدار",
+      "description": "مدیریت شهریه‌ها، درآمدها، هزینه‌های جاری و گزارشات مالی",
+      "permissions": [
+        "users:read",
+        "finance:read",
+        "finance:write",
+        "finance:reports"
+      ],
+      "isSystem": true
+    },
+    {
+      "id": "role-coach",
+      "key": "coach",
+      "title": "مربی",
+      "description": "مشاهده دوره‌های تحت نظر، ثبت حضور غیاب و ارتباط با اعضا",
+      "permissions": [
+        "packages:read",
+        "attendance:record",
+        "attendance:view_all"
+      ],
+      "isSystem": true
+    },
+    {
+      "id": "role-athlete",
+      "key": "athlete",
+      "title": "ورزشکار",
+      "description": "مشاهده برنامه‌ها، درخواست ثبت‌نام دوره، کارت بیمه و سوابق مالی",
+      "permissions": [
+        "packages:read",
+        "finance:read"
+      ],
+      "isSystem": true
+    },
+    {
+      "id": "role-parent",
+      "key": "parent",
+      "title": "والدین",
+      "description": "مشاهده یکپارچه سوابق مالی، حضورغیاب و دوره تمامی فرزندان",
+      "permissions": [
+        "packages:read",
+        "finance:read"
+      ],
+      "isSystem": true
+    }
+  ],
+  "links": [],
+  "auditLogs": [
+    {
+      "id": "audit-1786004509876-w4o3",
+      "userId": "admin",
+      "userName": "مدیر کل",
+      "action": "بروزرسانی برند و تنظیمات باشگاه",
+      "targetEntity": "ClubSettings",
+      "targetId": "main",
+      "details": "تغییر نام/لوگو/پالت رنگ به blue",
+      "timestamp": "1405/05/15 - ۱۱:۵۱:۴۹"
+    }
+  ],
+  "preRegistrations": [],
+  "clubSettings": {
+    "name": "سامانه جامع باشگاه بولدرینگ موج",
+    "slogan": "من نیک هستم. کنار موجهای دریا، هر صعود آرامشبخشه و هر حرکت، گامی توی برنامه پیشرفت تو. بیا تا با هم موج رو درک کنیم و در درون خود بسازیمش و مثل موج روی دیوار جاری شیم.",
+    "logoIcon": "mountain",
+    "themePalette": "blue",
+    "updatedAt": "1405/05/15"
+  },
+  "announcements": [],
+  "sessions": [],
+  "enrollments": [],
+  "transactions": [],
+  "attendanceRecords": [],
+  "debtors": [],
+  "creditors": [],
+  "insuranceRequests": [],
+  "supportTickets": [],
+  "notifications": [],
+  "products": [],
+  "shopInvoices": []
+}
