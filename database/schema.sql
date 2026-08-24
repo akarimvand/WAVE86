@@ -170,8 +170,8 @@ CREATE TABLE `club_settings` (
   `id` VARCHAR(100) NOT NULL PRIMARY KEY,
   `name` VARCHAR(255),
   `slogan` VARCHAR(255),
-  `logo_Icon` VARCHAR(100) DEFAULT 'mountain',
-  `theme_Palette` VARCHAR(50) DEFAULT 'teal',
+  `logoIcon` VARCHAR(100) DEFAULT 'mountain',
+  `themePalette` VARCHAR(50) DEFAULT 'teal',
   `smsApiKey` VARCHAR(255),
   `smsLineNumber` VARCHAR(50),
   `smsSignature` VARCHAR(100),
@@ -200,6 +200,8 @@ CREATE TABLE `courses` (
   `id` VARCHAR(100) NOT NULL PRIMARY KEY,
   `title` VARCHAR(255) NOT NULL,
   `sportType` VARCHAR(100),
+  `category` VARCHAR(100),
+  `maxCapacity` INT DEFAULT 20,
   `coachId` VARCHAR(100),
   `coachName` VARCHAR(255),
   `daysOfWeek` JSON,
@@ -541,3 +543,54 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ALTER TABLE `creditors`          MODIFY `amount` DECIMAL(18,2) DEFAULT 0;
 -- ALTER TABLE `sms_logs`           MODIFY `cost` DECIMAL(18,2) DEFAULT 0;
 -- ============================================================================
+
+-- ============================================================================
+-- v3.1 — Foreign Keys + Performance Indexes + user_roles (معادل Migration 005)
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `user_roles`;
+
+CREATE TABLE `user_roles` (
+  `user_id` VARCHAR(100) NOT NULL,
+  `role_key` VARCHAR(100) NOT NULL,
+  `assigned_at` VARCHAR(100),
+  PRIMARY KEY (`user_id`, `role_key`),
+  CONSTRAINT `fk_user_roles_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NOTE: user_roles rows are populated at server startup by the self-healing
+-- routine in server/mysql.ts (works on every MySQL/MariaDB version —
+-- JSON_TABLE requires MariaDB >= 10.6 and cannot be relied upon here).
+
+ALTER TABLE `enrollments`
+  ADD CONSTRAINT `fk_enrollments_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `transactions`
+  ADD CONSTRAINT `fk_transactions_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `debtors`
+  ADD CONSTRAINT `fk_debtors_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `shop_invoice_items`
+  ADD CONSTRAINT `fk_items_invoice` FOREIGN KEY (`invoiceId`) REFERENCES `shop_invoices`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `parent_athlete_links`
+  ADD CONSTRAINT `fk_links_parent` FOREIGN KEY (`parentId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `parent_athlete_links`
+  ADD CONSTRAINT `fk_links_athlete` FOREIGN KEY (`athleteId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `insurance_requests`
+  ADD CONSTRAINT `fk_insurance_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `app_notifications`
+  ADD CONSTRAINT `fk_notifications_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE `audit_logs`          ADD INDEX `idx_audit_timestamp` (`timestamp`);
+ALTER TABLE `audit_logs`          ADD INDEX `idx_audit_userid` (`userId`);
+ALTER TABLE `transactions`        ADD INDEX `idx_tx_createdat` (`createdAt`);
+ALTER TABLE `transactions`        ADD INDEX `idx_tx_status` (`status`);
+ALTER TABLE `transactions`        ADD INDEX `idx_tx_userid` (`userId`);
+ALTER TABLE `enrollments`         ADD INDEX `idx_enr_session` (`sessionId`);
+ALTER TABLE `enrollments`         ADD INDEX `idx_enr_user_status` (`userId`, `status`);
+ALTER TABLE `app_notifications`   ADD INDEX `idx_notif_user_read` (`userId`, `isRead`);
+ALTER TABLE `sms_logs`            ADD INDEX `idx_sms_sentat` (`sentAt`);
+ALTER TABLE `attendance_records`  ADD INDEX `idx_att_session_date` (`sessionId`, `date`);
+ALTER TABLE `attendance_records`  ADD INDEX `idx_att_userid` (`userId`);
+ALTER TABLE `shop_invoices`       ADD INDEX `idx_inv_createdat` (`createdAt`);
+ALTER TABLE `shop_invoices`       ADD INDEX `idx_inv_athlete` (`athleteId`);
+ALTER TABLE `products`            ADD INDEX `idx_products_code` (`code`);
+ALTER TABLE `users`               ADD INDEX `idx_users_fullname` (`fullName`);
+-- ============================ END OF v3.1 ==================================

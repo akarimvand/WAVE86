@@ -118,6 +118,10 @@ export interface Role {
 export interface User {
   id: string;
   username: string;
+  /** Optimistic-locking revision (server-managed, Phase 3). */
+  version?: number;
+  /** Set by server for bootstrap accounts; cleared after first password change. */
+  mustChangePassword?: boolean;
   firstName?: string;
   lastName?: string;
   fullName: string;

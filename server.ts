@@ -55,6 +55,19 @@ async function startServer() {
   app.use('/api/install', installRoutes);
   app.use('/api/mysql', syncRoutes);
 
+  // Readiness gate: first API requests wait for schema self-healing/migrations
+  // to finish, so the initial page load can never race database bootstrap.
+  const readyPromise = (async () => {
+    const pool = getMySqlPool();
+    await ensureAllTablesExist(pool);
+    console.log('[Server] MySQL schema checked and verified successfully.');
+    const migrationResult = await runMigrations(pool);
+    console.log(`[Server] Migrations applied=${migrationResult.applied.length} skipped=${migrationResult.skipped.length}`);
+    startBackupScheduler();
+  })();
+  readyPromise.catch((e: any) => console.warn('[Server] Bootstrap warning:', e.message || e));
+  app.set('readyPromise', readyPromise);
+
   // Health check endpoint
   app.get('/api/health', async (req, res) => {
     try {
@@ -95,19 +108,7 @@ async function startServer() {
 
   // 7. Start Listening
   const server = app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`[Server] Climbing Club Backend running at http://0.0.0.0:${PORT}`);
-
-    // Auto-bootstrap MySQL tables + migrations + backup scheduler in background
-    try {
-      const pool = getMySqlPool();
-      await ensureAllTablesExist(pool);
-      console.log('[Server] MySQL schema checked and verified successfully.');
-      const migrationResult = await runMigrations(pool);
-      console.log(`[Server] Migrations applied=${migrationResult.applied.length} skipped=${migrationResult.skipped.length}`);
-      startBackupScheduler();
-    } catch (e: any) {
-      console.warn('[Server] MySQL initial connection warning:', e.message || e);
-    }
+    console.log(`[Server] Climbing Club Backend running at http://0.0.0.0:${PORT} (warming up...)`);
   });
 
   // 8. Graceful Shutdown — no leaked connections on SIGTERM/SIGINT

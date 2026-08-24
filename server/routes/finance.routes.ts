@@ -14,7 +14,12 @@ const adminGuard = [authenticateJwt, requireRoles(['super_admin', 'admin', 'acco
 router.get('/transactions', ...financeGuard, async (req, res, next) => {
   try {
     const pool = getMySqlPool();
-    const [rows]: any = await pool.query('SELECT * FROM transactions ORDER BY id DESC LIMIT 500');
+    // Default ledger hides soft-voided records; pass ?includeCancelled=1 for archive.
+    const includeCancelled = String(req.query.includeCancelled || '') === '1';
+    const sql = includeCancelled
+      ? 'SELECT * FROM transactions ORDER BY id DESC LIMIT 500'
+      : "SELECT * FROM transactions WHERE status IS NULL OR status <> 'cancelled' ORDER BY id DESC LIMIT 500";
+    const [rows]: any = await pool.query(sql);
     res.json({ success: true, transactions: rows || [] });
   } catch (err: any) {
     res.status(500).json({ success: false, error: `خطا در دریافت تراکنش‌ها: ${err.message || err}` });

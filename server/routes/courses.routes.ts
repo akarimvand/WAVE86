@@ -2,9 +2,11 @@ import { Router } from 'express';
 import { getMySqlPool, withTransaction } from '../db';
 import { SyncRepository } from '../repository';
 import { writeAudit, getRequestInfo } from '../audit';
-import { validateRequestBody, authenticateJwt, requireRoles } from '../middleware';
+import { validateRequestBody, authenticateJwt, requireRoles, AuthenticatedRequest } from '../middleware';
 
 const router = Router();
+const staffGuard = [authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary', 'coach'])];
+const enrollAdminGuard = [authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary'])];
 
 /**
  * GET /api/courses
@@ -124,7 +126,7 @@ router.get('/enrollments/list', authenticateJwt, requireRoles(['super_admin', 'a
  * Capacity + duplicate-active checks run INSIDE a transaction with a row lock
  * (SELECT ... FOR UPDATE) so two concurrent secretaries cannot overbook a session.
  */
-router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), validateRequestBody(['sessionId', 'userId']), async (req, res, next) => {
+router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), validateRequestBody(['sessionId', 'userId']), async (req: AuthenticatedRequest, res, next) => {
   try {
     const { sessionId, userId } = req.body;
     const pool = getMySqlPool();
@@ -219,28 +221,85 @@ router.post('/enrollments', authenticateJwt, requireRoles(['super_admin', 'admin
 /**
  * DELETE /api/courses/enrollments/:id  — soft cancel (never hard delete)
  */
-router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req: any, res, next) => {
+router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary']), async (req: AuthenticatedRequest, res, next) => {
+  const targetId = req.params.id;
+  const hard = String(req.query.mode || '').toLowerCase() === 'hard';
   try {
     const pool = getMySqlPool();
-    await pool.query(
-      "UPDATE enrollments SET status = 'canceled', updatedAt = ? WHERE id = ? AND status != 'canceled'",
-      [new Date().toISOString(), req.params.id]
-    );
+    const nowIso = new Date().toISOString();
 
-    await writeAudit(pool, {
-      userId: req.user?.id,
-      userName: req.user?.username || req.user?.fullName,
-      action: 'لغو ثبت‌نام سانس',
-      entity: 'Enrollment',
-      entityId: req.params.id,
-      details: 'لغو ثبت‌نام توسط مدیریت',
-      newValue: { status: 'canceled' },
-      ...getRequestInfo(req),
+    if (!hard) {
+      // Soft cancel — default
+      await pool.query(
+        "UPDATE enrollments SET status = 'canceled', updatedAt = ? WHERE id = ? AND status != 'canceled'",
+        [nowIso, targetId]
+      );
+      await writeAudit(pool, {
+        userId: req.user?.id,
+        userName: req.user?.username || req.user?.fullName,
+        action: 'لغو ثبت‌نام سانس',
+        entity: 'Enrollment',
+        entityId: targetId,
+        details: 'لغو ثبت‌نام توسط مدیریت',
+        newValue: { status: 'canceled' },
+        ...getRequestInfo(req),
+      });
+      return res.json({ success: true, message: 'ثبت‌نام با موفقیت لغو شد.', mode: 'cancel' });
+    }
+
+    // HARD delete with cascading cleanup inside ONE transaction:
+    //   attendance of this athlete in this session
+    //   + pending tuition debtors & transactions tied to the session title
+    //     (financial tx are SOFT-VOIDED, never hard-deleted — mission rule #13)
+    //   + the enrollment row itself
+    await withTransaction(pool, async (conn) => {
+      const [enrRows]: any = await conn.query('SELECT * FROM enrollments WHERE id = ?', [targetId]);
+      const enr = enrRows?.[0];
+      if (!enr) {
+        const err: any = new Error('ثبت‌نام یافت نشد.');
+        err.status = 404;
+        throw err;
+      }
+
+      const [sRows]: any = await conn.query('SELECT title FROM courses WHERE id = ?', [enr.sessionId]);
+      const sessionTitle = sRows?.[0]?.title || '';
+
+      await conn.query(
+        'DELETE FROM attendance_records WHERE userId = ? AND sessionId = ?',
+        [enr.userId, enr.sessionId]
+      );
+
+      if (sessionTitle) {
+        await conn.query(
+          "DELETE FROM debtors WHERE userId = ? AND category = 'tuition' AND categoryTitle LIKE ?",
+          [enr.userId, `%${sessionTitle}%`]
+        );
+        await conn.query(
+          "UPDATE transactions SET status='cancelled', voidedAt=?, voidedBy=?, voidReason='حذف ثبت‌نام سانس' WHERE userId = ? AND type = 'tuition' AND status <> 'cancelled' AND description LIKE ?",
+          [nowIso, req.user?.username || 'مدیر', enr.userId, `%${sessionTitle}%`]
+        );
+      }
+
+      await conn.query('DELETE FROM enrollments WHERE id = ?', [targetId]);
+
+      await writeAudit(conn, {
+        userId: req.user?.id,
+        userName: req.user?.username || req.user?.fullName,
+        action: 'حذف کامل ثبت‌نام',
+        entity: 'Enrollment',
+        entityId: targetId,
+        details: `حذف کامل ثبت‌نام ${enr.athleteName} همراه سوابق حضور و اقساط مرتبط`,
+        oldValue: enr,
+        ...getRequestInfo(req),
+      });
     });
 
-    res.json({ success: true, message: 'ثبت‌نام با موفقیت لغو شد.' });
+    res.json({ success: true, message: 'ثبت‌نام و سوابق مرتبط به‌طور کامل حذف شد.', mode: 'hard' });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: `خطا در لغو ثبت‌نام: ${err.message || err}` });
+    if (err.status) {
+      return res.status(err.status).json({ success: false, error: err.message });
+    }
+    res.status(500).json({ success: false, error: `خطا در حذف ثبت‌نام: ${err.message || err}` });
   }
 });
 
@@ -248,7 +307,7 @@ router.delete('/enrollments/:id', authenticateJwt, requireRoles(['super_admin', 
  * POST /api/courses/attendance/batch
  * Atomic upsert of multiple attendance records for one session/date.
  */
-router.post('/attendance/batch', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary', 'coach']), async (req, res, next) => {
+router.post('/attendance/batch', authenticateJwt, requireRoles(['super_admin', 'admin', 'secretary', 'coach']), async (req: AuthenticatedRequest, res, next) => {
   try {
     const { sessionId, date, records } = req.body;
     if (!sessionId || !date || !Array.isArray(records) || records.length === 0) {
@@ -295,6 +354,37 @@ router.post('/attendance/batch', authenticateJwt, requireRoles(['super_admin', '
     res.json({ success: true, message: `حضور و غیاب ${prepared.length} نفر ثبت شد.`, records: prepared });
   } catch (err: any) {
     res.status(500).json({ success: false, error: `خطا در ثبت حضور و غیاب: ${err.message || err}` });
+  }
+});
+
+/**
+ * POST /api/courses/enrollments/dedupe  (Admin)
+ * Removes duplicate ACTIVE enrollment rows for the same (sessionId,userId).
+ * Legacy data created before the FOR-UPDATE guard may contain doubles; these
+ * make a deleted athlete "reappear" while its twin row still exists.
+ */
+router.post('/enrollments/dedupe', ...enrollAdminGuard, async (req, res, next) => {
+  try {
+    const pool = getMySqlPool();
+    const [rows]: any = await pool.query(
+      "SELECT id, sessionId, userId, createdAt FROM enrollments WHERE status = 'active' ORDER BY createdAt ASC, id ASC"
+    );
+    const seen = new Map<string, string>();
+    const dupIds: string[] = [];
+    for (const r of rows || []) {
+      const key = `${r.sessionId}|${r.userId}`;
+      if (seen.has(key)) dupIds.push(r.id);
+      else seen.set(key, r.id);
+    }
+    let removed = 0;
+    if (dupIds.length > 0) {
+      const placeholders = dupIds.map(() => '?').join(', ');
+      await pool.query(`DELETE FROM enrollments WHERE id IN (${placeholders})`, dupIds);
+      removed = dupIds.length;
+    }
+    res.json({ success: true, message: `${removed} رکورد تکراری حذف شد.`, removed, activeKept: seen.size });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در پاکسازی تکراری‌ها: ${err.message || err}` });
   }
 });
 

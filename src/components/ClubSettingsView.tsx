@@ -56,7 +56,6 @@ export const ClubSettingsView: React.FC<ClubSettingsViewProps> = ({ onSettingsUp
   const [logoIcon, setLogoIcon] = useState(currentSettings.logoIcon);
   const [logoUrl, setLogoUrl] = useState(currentSettings.logoUrl || '');
   const [themePalette, setThemePalette] = useState<ThemePaletteKey>(currentSettings.themePalette);
-  const [offlineMode, setOfflineMode] = useState(() => dbStore.isOfflineModeEnabled());
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isDbTestModalOpen, setIsDbTestModalOpen] = useState(false);
   const [isSyncDiagnosticsModalOpen, setIsSyncDiagnosticsModalOpen] = useState(false);
@@ -126,8 +125,6 @@ export const ClubSettingsView: React.FC<ClubSettingsViewProps> = ({ onSettingsUp
 
   const handleSaveBrand = (e: React.FormEvent) => {
     e.preventDefault();
-    const wasOffline = dbStore.isOfflineModeEnabled();
-    dbStore.setOfflineModeEnabled(offlineMode);
 
     const updated = dbStore.updateClubSettings(
       {
@@ -145,14 +142,7 @@ export const ClubSettingsView: React.FC<ClubSettingsViewProps> = ({ onSettingsUp
     }
 
     setSavedSuccess(true);
-    
-    if (wasOffline !== offlineMode) {
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-    } else {
-      setTimeout(() => setSavedSuccess(false), 3000);
-    }
+    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const [isUploadingSliderImage, setIsUploadingSliderImage] = useState(false);
@@ -506,81 +496,39 @@ export const ClubSettingsView: React.FC<ClubSettingsViewProps> = ({ onSettingsUp
               </div>
             </div>
 
-            {/* Database & Storage Mode Card */}
+            {/* Storage Mode — MySQL-only architecture (no local/offline storage) */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                   <Database className="w-4 h-4 text-slate-600" />
-                  تنظیمات پایگاه داده و حالت آفلاین (Storage Engine)
+                  ذخیره‌سازی داده‌ها
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  نحوه ذخیره‌سازی داده‌های سامانه و همگام‌سازی با پایگاه داده هاست را انتخاب کنید.
+                  معماری ذخیره‌سازی این سامانه فقط و فقط مبتنی بر پایگاه داده MySQL است.
                 </p>
               </div>
 
-              <div className="space-y-3">
-                <div
-                  onClick={() => setOfflineMode(false)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                    !offlineMode
-                      ? 'bg-emerald-50/50 border-emerald-500 ring-1 ring-emerald-500'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="database_mode"
-                    checked={!offlineMode}
-                    onChange={() => setOfflineMode(false)}
-                    className="mt-1 accent-emerald-600 cursor-pointer"
-                  />
-                  <div className="space-y-1">
-                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      پایگاه داده آنلاین MySQL (توصیه شده و پیش‌فرض)
-                      <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.5 rounded-md">
-                        امن و یکپارچه
-                      </span>
+              <div className="p-4 rounded-xl border border-emerald-500 bg-emerald-50/50 flex items-start gap-3">
+                <div className="mt-1 w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-600 shrink-0" />
+                <div className="space-y-1">
+                  <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                    پایگاه داده آنلاین MySQL
+                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.5 rounded-md">
+                      تنها حالت فعال
                     </span>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      کلیه تراکنش‌ها، ثبت‌نام‌ها، امور مالی و داده‌ها مستقیماً و منحصراً روی دیتابیس MySQL هاست ذخیره می‌شوند. در این حالت کش مرورگرها داده‌های شما را آلوده یا بازنویسی نمی‌کند.
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setOfflineMode(true)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                    offlineMode
-                      ? 'bg-amber-50/50 border-amber-500 ring-1 ring-amber-500'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="database_mode"
-                    checked={offlineMode}
-                    onChange={() => setOfflineMode(true)}
-                    className="mt-1 accent-amber-600 cursor-pointer"
-                  />
-                  <div className="space-y-1">
-                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      ذخیره‌سازی آفلاین و محلی مرورگر (LocalStorage)
-                    </span>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      برای سناریوهای آفلاین یا تست محلی بدون نیاز به اتصال دیتابیس آنلاین. اطلاعات در کش محلی مرورگر شما باقی می‌ماند.
-                    </p>
-                  </div>
+                  </span>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    کلیه تراکنش‌ها، ثبت‌نام‌ها، امور مالی و داده‌ها مستقیماً و منحصراً روی دیتابیس MySQL هاست ذخیره می‌شوند. کش مرورگرها هیچ نقشی در نگهداری داده‌ها ندارد.
+                  </p>
                 </div>
               </div>
 
-              {!offlineMode && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-800 leading-relaxed flex gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
-                  <span>
-                    <strong>توجه:</strong> در حالت پایگاه داده آنلاین MySQL، اگر اتصال سرور به دیتابیس به هردلیلی قطع باشد، سامانه جهت امنیت داده‌ها به اطلاعات محلی قدیمی رجوع نمی‌کند تا هیچ اطلاعات مالی یا پرسنلی مخدوش نگردد.
-                  </span>
-                </div>
-              )}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-800 leading-relaxed flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+                <span>
+                  <strong>توجه:</strong> امکان ذخیره‌سازی محلی/آفلاین (LocalStorage) در این نسخه به‌طور کامل حذف شده است؛ هیچ داده‌ای در مرورگر ذخیره نمی‌شود. در صورت قطعی اتصال به دیتابیس، سامانه جهت امنیت داده‌ها به اطلاعات محلی رجوع نمی‌کند تا هیچ اطلاعات مالی یا پرسنلی مخدوش نگردد.
+                </span>
+              </div>
             </div>
 
             <div className="flex justify-end">

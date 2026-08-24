@@ -22,7 +22,18 @@ export function loadSavedConfig(): DbConfig {
       const raw = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
       const data = JSON.parse(raw);
       if (data) {
-        if (data.db) return data.db as DbConfig;
+        if (data.db) {
+          // Production: environment variables override file credentials
+          const cfg = data.db as DbConfig;
+          return {
+            ...cfg,
+            host: process.env.DB_HOST || cfg.host,
+            port: Number(process.env.DB_PORT) || Number(cfg.port) || 3306,
+            user: process.env.DB_USER || cfg.user,
+            password: process.env.DB_PASSWORD ?? cfg.password ?? '',
+            database: process.env.DB_NAME || cfg.database,
+          };
+        }
         if (data.host && data.database) {
           return {
             host: data.host,

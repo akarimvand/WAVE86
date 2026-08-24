@@ -62,7 +62,12 @@ export async function runMigrations(pool: mysql.Pool): Promise<{ applied: string
         } catch (stmtErr: any) {
           // Tolerate idempotent re-application artifacts (partial prior run)
           const code = stmtErr?.code || '';
-          if (code === 'ER_DUP_FIELDNAME' || code === 'ER_DUP_KEYNAME') {
+          if (
+            code === 'ER_DUP_FIELDNAME' ||
+            code === 'ER_DUP_KEYNAME' ||
+            code === 'ER_FK_DUP_NAME' ||
+            code === 'ER_DUP_CONSTRAINT_NAME'
+          ) {
             console.warn(`[Migration] ${file}: skipping already-existing object (${code})`);
             continue;
           }

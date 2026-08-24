@@ -2,6 +2,7 @@ import { Request, Response, NextFunction, Express } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 
 // JWT Secret: MUST be provided via environment in production.
 // If missing, an ephemeral random secret is used (invalidates sessions on restart) with a loud warning.
@@ -16,7 +17,7 @@ export const JWT_SECRET: string = (() => {
   } else {
     console.warn('[Security] JWT_SECRET environment variable is NOT set. Using an ephemeral random secret — sessions will NOT survive restarts. Set JWT_SECRET in production!');
   }
-  return require('crypto').randomBytes(48).toString('hex');
+  return crypto.randomBytes(48).toString('hex');
 })();
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 export const ALLOWED_MIME_TYPES = [

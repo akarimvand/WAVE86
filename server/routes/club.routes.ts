@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getMySqlPool } from '../db';
+import { writeAudit, getRequestInfo } from '../audit';
 import { validateRequestBody, authenticateJwt, requireRoles, AuthenticatedRequest } from '../middleware';
 
 const router = Router();
@@ -135,6 +136,105 @@ router.get('/attendance', ...coachGuard, async (req, res, next) => {
     res.json({ success: true, attendanceRecords: rows || [] });
   } catch (err: any) {
     res.status(500).json({ success: false, error: `خطا در دریافت سوابق حضورغیاب: ${err.message || err}` });
+  }
+});
+
+// ============================================================
+// DELETE endpoints (Group-3 fixes: sync-only deletes resurrected after refresh)
+// ============================================================
+
+/** DELETE /api/club/announcements/:id */
+router.delete('/announcements/:id', ...staffGuard, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const pool = getMySqlPool();
+    const [old]: any = await pool.query('SELECT * FROM club_announcements WHERE id = ?', [req.params.id]);
+    await pool.query('DELETE FROM club_announcements WHERE id = ?', [req.params.id]);
+    await writeAudit(pool, {
+      userId: req.user?.id, userName: req.user?.username || req.user?.fullName,
+      action: 'حذف اطلاعیه/اسلایدر', entity: 'ClubAnnouncement', entityId: req.params.id,
+      oldValue: old?.[0], ...getRequestInfo(req),
+    });
+    res.json({ success: true, message: 'اطلاعیه حذف شد.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در حذف اطلاعیه: ${err.message || err}` });
+  }
+});
+
+/** DELETE /api/club/insurance/:id */
+router.delete('/insurance/:id', ...staffGuard, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const pool = getMySqlPool();
+    const [old]: any = await pool.query('SELECT * FROM insurance_requests WHERE id = ?', [req.params.id]);
+    await pool.query('DELETE FROM insurance_requests WHERE id = ?', [req.params.id]);
+    await writeAudit(pool, {
+      userId: req.user?.id, userName: req.user?.username || req.user?.fullName,
+      action: 'حذف پرونده بیمه', entity: 'InsuranceRequest', entityId: req.params.id,
+      oldValue: old?.[0], ...getRequestInfo(req),
+    });
+    res.json({ success: true, message: 'پرونده بیمه حذف شد.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در حذف بیمه: ${err.message || err}` });
+  }
+});
+
+/** DELETE /api/club/links/:id — unlink parent↔athlete */
+router.delete('/links/:id', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const pool = getMySqlPool();
+    const [rows]: any = await pool.query('SELECT * FROM parent_athlete_links WHERE id = ?', [req.params.id]);
+    const link = rows?.[0];
+    if (!link) return res.status(404).json({ success: false, error: 'پیوند یافت نشد.' });
+    const isStaff = req.user?.roles?.some((r: string) => ['super_admin', 'admin', 'secretary'].includes(r));
+    if (!isStaff && link.parentId !== req.user?.id) {
+      return res.status(403).json({ success: false, error: 'اجازه حذف این پیوند را ندارید.' });
+    }
+    await pool.query('DELETE FROM parent_athlete_links WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'پیوند حذف شد.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در حذف پیوند: ${err.message || err}` });
+  }
+});
+
+/** DELETE /api/club/smslogs/:id   |   DELETE /api/club/smslogs/all  (staff) */
+router.delete(['/smslogs/all', '/smslogs/:id'], ...staffGuard, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const pool = getMySqlPool();
+    if (req.params.id === 'all') {
+      await pool.query('DELETE FROM sms_logs');
+      return res.json({ success: true, message: 'همه لاگ‌های پیامک پاک شدند.' });
+    }
+    await pool.query('DELETE FROM sms_logs WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'لاگ پیامک حذف شد.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در حذف لاگ پیامک: ${err.message || err}` });
+  }
+});
+
+/**
+ * POST /api/club/notifications/delete-read
+ * Physically removes READ notifications owned by the given user
+ * (staff may target anyone; regular users only themselves).
+ */
+router.post('/notifications/delete-read', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const isStaff = req.user?.roles?.some((r: string) => ['super_admin', 'admin', 'secretary'].includes(r));
+    const targetUser = req.body?.userId || req.user?.id;
+    if (!isStaff && targetUser !== req.user?.id) {
+      return res.status(403).json({ success: false, error: 'فقط اعلانهای خودتان قابل حذف است.' });
+    }
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'لیست شناسه‌ها خالی است.' });
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const pool = getMySqlPool();
+    const [r]: any = await pool.query(
+      `DELETE FROM app_notifications WHERE id IN (${placeholders}) AND userId = ?`,
+      [...ids, targetUser]
+    );
+    res.json({ success: true, deleted: r?.affectedRows ?? 0 });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در حذف اعلانها: ${err.message || err}` });
   }
 });
 

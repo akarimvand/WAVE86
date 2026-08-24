@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
+import { hashPassword } from './db';
 
 export interface DbConfig {
   host: string;
@@ -22,7 +23,18 @@ export function loadSavedConfig(): DbConfig {
       const raw = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
       const data = JSON.parse(raw);
       if (data) {
-        if (data.db) return data.db as DbConfig;
+        if (data.db) {
+          // Production: environment variables override file credentials
+          const cfg = data.db as DbConfig;
+          return {
+            ...cfg,
+            host: process.env.DB_HOST || cfg.host,
+            port: Number(process.env.DB_PORT) || Number(cfg.port) || 3306,
+            user: process.env.DB_USER || cfg.user,
+            password: process.env.DB_PASSWORD ?? cfg.password ?? '',
+            database: process.env.DB_NAME || cfg.database,
+          };
+        }
         if (data.host && data.database) {
           return {
             host: data.host,
@@ -868,6 +880,56 @@ export async function initializeTables(pool: mysql.Pool) {
   await ensureCol('audit_logs', 'newValue', "LONGTEXT NULL");
   await ensureCol('audit_logs', 'ip', "VARCHAR(64) NULL");
   await ensureCol('audit_logs', 'userAgent', "VARCHAR(255) NULL");
+
+  // Enrollment columns used by SyncRepository.syncEnrollments & REST endpoints
+  const enrollmentCols: Record<string, string> = {
+    athleteNationalId: 'VARCHAR(20)',
+    paymentMethod: "VARCHAR(50) DEFAULT 'pos'",
+    trackingNumber: 'VARCHAR(100)',
+    receiptUrl: 'LONGTEXT',
+    receiptFileName: 'VARCHAR(255)',
+    startDate: 'VARCHAR(100)',
+    endDate: 'VARCHAR(100)',
+    totalSessionsAllowed: 'INT DEFAULT 12',
+    usedSessionsCount: 'INT DEFAULT 0',
+    priceAtEnrollment: 'DECIMAL(18,2) DEFAULT 0',
+    createdAt: 'VARCHAR(100)',
+    updatedAt: 'VARCHAR(100)',
+  };
+  for (const [col, def] of Object.entries(enrollmentCols)) {
+    await ensureCol('enrollments', col, def);
+  }
+
+  // Attendance check-in/out + course sessionsLimit (used by enrollment endpoint)
+  await ensureCol('attendance_records', 'checkInTime', 'VARCHAR(50)');
+  await ensureCol('attendance_records', 'checkOutTime', 'VARCHAR(50)');
+  await ensureCol('courses', 'sessionsLimit', 'INT DEFAULT 12');
+
+  // 6. user_roles junction table — normalized role storage (additive; users.roles
+  //    JSON stays as the read-model for backward compatibility with the frontend).
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS user_roles (
+      user_id VARCHAR(100) NOT NULL,
+      role_key VARCHAR(100) NOT NULL,
+      assigned_at VARCHAR(100),
+      PRIMARY KEY (user_id, role_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    const [roleUsers]: any = await pool.query('SELECT id, roles FROM users WHERE roles IS NOT NULL');
+    for (const ru of roleUsers) {
+      let keys: string[] = [];
+      try { keys = typeof ru.roles === 'string' ? JSON.parse(ru.roles) : (ru.roles || []); } catch { continue; }
+      if (!Array.isArray(keys)) continue;
+      for (const key of keys) {
+        if (typeof key !== 'string' || !key) continue;
+        await pool.query(
+          'INSERT IGNORE INTO user_roles (user_id, role_key, assigned_at) VALUES (?, ?, ?)',
+          [ru.id, key, new Date().toISOString()]
+        );
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Database] user_roles junction sync skipped:', err.message || err);
+  }
 
   console.log('[Database] Self-healing checks finished successfully.');
 }

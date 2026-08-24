@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getMySqlPool, withTransaction, getClubSettings, loadSavedConfig } from '../db';
 import { SyncRepository } from '../repository';
 import { convertBase64ToLocalFile } from './upload.routes';
-import { authenticateJwt, requireRoles, optionalJwt } from '../middleware';
+import { authenticateJwt, requireRoles, optionalJwt, AuthenticatedRequest } from '../middleware';
 
 const router = Router();
 
@@ -17,6 +17,9 @@ router.post('/sync', authenticateJwt, async (req, res) => {
   }
 
   try {
+    const ready = req.app.get('readyPromise');
+    if (ready) { try { await ready; } catch {} }
+
     const pool = getMySqlPool();
     await withTransaction(pool, async (conn) => {
       if (data.roles) await SyncRepository.syncRoles(conn, data.roles);
@@ -318,8 +321,11 @@ router.get('/test-tables', authenticateJwt, requireRoles(['super_admin', 'admin'
  * GET /api/mysql/full-data
  * Returns the entire synced state from MySQL
  */
-router.get('/full-data', optionalJwt, async (req, res) => {
+router.get('/full-data', optionalJwt, async (req: AuthenticatedRequest, res) => {
   try {
+    const ready = req.app.get('readyPromise');
+    if (ready) { try { await ready; } catch {} }
+
     const pool = getMySqlPool();
 
     const [
@@ -350,7 +356,9 @@ router.get('/full-data', optionalJwt, async (req, res) => {
       pool.query('SELECT * FROM club_announcements'),
       pool.query('SELECT * FROM courses'),
       pool.query('SELECT * FROM enrollments'),
-      pool.query('SELECT * FROM transactions'),
+      // Soft-voided financial records are excluded from app bootstrap data
+      // (they remain archived in DB and available via ?includeCancelled=1).
+      pool.query("SELECT * FROM transactions WHERE status IS NULL OR status <> 'cancelled'"),
       pool.query('SELECT * FROM attendance_records'),
       pool.query('SELECT * FROM debtors'),
       pool.query('SELECT * FROM creditors'),

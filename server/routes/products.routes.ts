@@ -215,10 +215,26 @@ router.put('/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secre
     const p = req.body;
     const pool = getMySqlPool();
 
-    const [result]: any = await pool.query(
-      `UPDATE products SET 
-         code=?, name=?, category=?, price=?, buyPrice=?, stock=?, minStock=?, minStockAlert=?, 
-         unit=?, imageUrl=?, description=?, isActive=?, updatedAt=?
+    // --- Optimistic Locking: reject stale overwrites with HTTP 409 ---
+    const [current]: any = await pool.query('SELECT version FROM products WHERE id = ?', [id]);
+    if (current.length === 0) {
+      return res.status(404).json({ success: false, error: 'محصول مورد نظر برای ویرایش یافت نشد.' });
+    }
+    const dbVersion = Number(current[0].version) || 1;
+    const clientVersion = p.version === undefined ? null : Number(p.version);
+    if (clientVersion !== null && clientVersion !== dbVersion) {
+      return res.status(409).json({
+        success: false,
+        error: 'این کالا توسط کاربر دیگری تغییر کرده است. صفحه را تازه‌سازی و مجدداً تلاش کنید.',
+        code: 'VERSION_CONFLICT',
+        currentVersion: dbVersion,
+      });
+    }
+
+    await pool.query(
+      `UPDATE products SET
+         code=?, name=?, category=?, price=?, buyPrice=?, stock=?, minStock=?, minStockAlert=?,
+         unit=?, imageUrl=?, description=?, isActive=?, updatedAt=?, version=version+1
        WHERE id=?`,
       [
         p.code || '',
@@ -238,11 +254,7 @@ router.put('/:id', authenticateJwt, requireRoles(['super_admin', 'admin', 'secre
       ]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, error: 'محصول مورد نظر برای ویرایش یافت نشد.' });
-    }
-
-    res.json({ success: true, message: 'محصول با موفقیت به‌روزرسانی شد.' });
+    res.json({ success: true, message: 'محصول با موفقیت به‌روزرسانی شد.', version: dbVersion + 1 });
   } catch (err: any) {
     res.status(500).json({
       success: false,

@@ -113,6 +113,10 @@ router.get('/:id', authenticateJwt, async (req: AuthenticatedRequest, res, next)
 router.post('/', ...adminGuard, validateRequestBody(['nationalId']), async (req, res, next) => {
   try {
     const u = { ...req.body };
+    // Server generates the primary key when the client does not supply one
+    if (!u.id) {
+      u.id = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    }
     if (u.password && !u.password.startsWith('$2a$') && !u.password.startsWith('$2b$')) {
       u.password = await hashPassword(u.password);
     }

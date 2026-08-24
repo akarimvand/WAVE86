@@ -1,0 +1,22 @@
+
+> wave69-club-management@0.0.0 dev
+> tsx server.ts
+
+[Security] JWT_SECRET environment variable is NOT set. Using an ephemeral random secret — sessions will NOT survive restarts. Set JWT_SECRET in production!
+[Server] Climbing Club Backend running at http://0.0.0.0:3000 (warming up...)
+[Database] Running self-healing schema compatibility checks...
+[Database] Self-healing checks finished successfully.
+[Server] MySQL schema checked and verified successfully.
+[Migration] 005_foreign_keys_indexes.sql: skipping already-existing object (ER_DUP_KEYNAME)
+[Migration] 005_foreign_keys_indexes.sql: skipping already-existing object (ER_DUP_KEYNAME)
+[Migration] Applied 005_foreign_keys_indexes.sql (23 statements)
+[Server] Migrations applied=1 skipped=0
+[BackupScheduler] Active — interval 24h, local=C:\xampp\htdocs\WAVE86\backups\auto, remote=NOT CONFIGURED (set BACKUP_REMOTE_DIR)
+[BackupScheduler] Backup created: moj_auto_daily_2026-08-24T10-48-16.json (1083.7 KB) local
+[Sync MySQL Error] Cannot add or update a child row: a foreign key constraint fails (`oytblnmz_mouj`.`parent_athlete_links`, CONSTRAINT `fk_links_athlete` FOREIGN KEY (`athleteId`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE)
+[2m2:20:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2maggressive-tests.mjs[22m
+[2m2:22:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mverify-schema.mjs[22m
+[2m2:22:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2morphan-scan.mjs[22m
+[2m2:22:17 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mREFACTORING_PHASES.md[22m
+[2m2:22:44 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mREFACTORING_PHASES.md[22m
+[2m2:31:05 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/App.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\HeaderInboxModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SyncDiagnosticsModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Sidebar.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\CoachPortalView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DataExportView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AdminAnalyticsDashboard.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\PreRegistrationAdminPanel.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SessionsManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AttendanceTrackerView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\FinancialDashboardView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SmsManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SupportTicketingView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ClubSettingsView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Phase1RolesPermissions.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ShopExpensesView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\SportsInsuranceView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\PreRegistrationPublicForm.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\FinancialAccountingView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\UserPortalCoursesView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\EditEnrollmentModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\AthleteImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DataImportManagementView.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ZipProfilePhotoImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ProductImporterModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ProductDetailModal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\ExcelPreRegImporter.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\Member360Modal.tsx, /@fs/C:\xampp\htdocs\WAVE86\src\components\DigitalMembershipCardModal.tsx[22m

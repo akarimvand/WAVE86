@@ -28,28 +28,6 @@ import {
 import { getCurrentJalaliDate, formatJalaliDate, addMonthsToJalali, isUserUnder18 } from '../utils/jalaliDate';
 import { DEFAULT_CLUB_SETTINGS, applyThemeToDocument } from '../utils/theme';
 
-const DB_KEYS = {
-  USERS: 'moj_users_v1',
-  ROLES: 'moj_roles_v1',
-  LINKS: 'moj_parent_links_v1',
-  AUDIT: 'moj_audit_v1',
-  PREREG: 'moj_prereg_v1',
-  CLUB_SETTINGS: 'moj_club_settings_v1',
-  SESSIONS: 'moj_sessions_v1',
-  ENROLLMENTS: 'moj_enrollments_v1',
-  TRANSACTIONS: 'moj_transactions_v1',
-  ATTENDANCE: 'moj_attendance_v1',
-  DEBTORS: 'moj_debtors_v1',
-  CREDITORS: 'moj_creditors_v1',
-  INSURANCE_REQ: 'moj_insurance_req_v1',
-  TICKETS: 'moj_tickets_v1',
-  ANNOUNCEMENTS: 'moj_announcements_v1',
-  NOTIFICATIONS: 'moj_notifications_v1',
-  PRODUCTS: 'moj_products_v1',
-  SHOP_INVOICES: 'moj_shop_invoices_v1',
-  SMS_LOGS: 'moj_sms_logs_v1',
-};
-
 const SEED_PRODUCTS: Product[] = [];
 
 
@@ -90,14 +68,6 @@ class StorageEngine {
   private dbConnected: boolean = false;
   private syncTimeout: any = null;
   private hasLoadedFromBackend: boolean = false;
-
-  public isOfflineModeEnabled(): boolean {
-    return false;
-  }
-
-  public setOfflineModeEnabled(_enabled: boolean) {
-    // Offline mode is disabled. Direct database connection is required.
-  }
 
   public isDbConnected(): boolean {
     return this.dbConnected;
@@ -368,6 +338,96 @@ class StorageEngine {
     this.isLoadingBackendData = true;
 
     try {
+      // Auto-retry (Phase 4): the very first request after a server cold-start
+      // can race with schema self-healing / pool warm-up and fail. Retrying
+      // silently prevents a false "server disconnected" state on first load.
+      const MAX_ATTEMPTS = 5;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const ok = await this.attemptLoadFromBackendOnce();
+        if (ok) return true;
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
+      return false;
+    } finally {
+      this.isLoadingBackendData = false;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // OFFLINE MUTATION QUEUE (Phase 4)
+  // When the server is unreachable, mutations are enqueued and automatically
+  // replayed in order as soon as connectivity returns.
+  // ------------------------------------------------------------------
+  private offlineQueue: Array<{ method: 'POST' | 'PUT' | 'DELETE'; path: string; body?: any }> = [];
+  private isFlushingQueue = false;
+
+  /** Fire-and-forget mutation with automatic offline fallback. */
+  private sendMutation(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any, extraHeaders?: Record<string, string>): void {
+    fetch(path, {
+      method,
+      headers: this.getAuthHeaders({
+        ...(extraHeaders || {}),
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      }),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }).then(async (res) => {
+      if (res.status >= 500 || res.status === 401 || res.status === 403) {
+        // 5xx = server trouble; 401/403 = auth problem (expired token / logged-out
+        // tab). Both are RETRYABLE: keep the mutation queued so it replays after
+        // connectivity or a fresh login. Previously 401/403 were silently
+        // swallowed here — the UI showed success while the row survived in MySQL
+        // and "resurrected" after the next page refresh (bug report: enrollment
+        // delete doesn't stick).
+        this.offlineQueue.push({ method, path, body });
+        if (res.status === 401 || res.status === 403) {
+          console.warn(`[dbStore] ${res.status} Unauthorized/Forbidden — mutation queued until re-login (${this.offlineQueue.length} pending):`, method, path);
+          try {
+            window.dispatchEvent(new CustomEvent('dbStoreMutationQueued', {
+              detail: { status: res.status, method, path },
+            }));
+          } catch {}
+        } else {
+          console.warn(`[dbStore] Server ${res.status} — mutation queued (${this.offlineQueue.length} pending)`);
+        }
+      }
+    }).catch(() => {
+      this.offlineQueue.push({ method, path, body });
+      console.warn(`[dbStore] Network down — mutation queued (${this.offlineQueue.length} pending)`);
+    });
+  }
+
+  private async flushOfflineQueue(): Promise<void> {
+    if (this.isFlushingQueue || this.offlineQueue.length === 0) return;
+    this.isFlushingQueue = true;
+    try {
+      let guard = 500;
+      while (this.offlineQueue.length > 0 && guard-- > 0) {
+        const item = this.offlineQueue[0];
+        let res: Response | null = null;
+        try {
+          res = await fetch(item.path, {
+            method: item.method,
+            headers: this.getAuthHeaders(item.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+            body: item.body === undefined ? undefined : JSON.stringify(item.body),
+          });
+        } catch { break; } // still offline
+        if (!res || res.status >= 500 || res.status === 401 || res.status === 403) break; // retry later (needs fresh login)
+        this.offlineQueue.shift(); // delivered (2xx and other 4xx are both final)
+      }
+      if (this.offlineQueue.length === 0) {
+        console.log('[dbStore] Offline queue fully flushed.');
+      } else {
+        console.warn(`[dbStore] Offline queue: ${this.offlineQueue.length} still pending.`);
+      }
+    } finally {
+      this.isFlushingQueue = false;
+    }
+  }
+
+  private async attemptLoadFromBackendOnce(): Promise<boolean> {
+    try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         try { controller.abort(); } catch {}
@@ -507,6 +567,8 @@ class StorageEngine {
       }
 
       this.hasLoadedFromBackend = true;
+      // Connectivity restored → replay everything queued while offline.
+      void this.flushOfflineQueue();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('dbStoreUpdated'));
       }
@@ -518,8 +580,6 @@ class StorageEngine {
       // Keep current in-memory data on error; only mark offline (Phase 4)
       this.setDbConnected(false);
       return false;
-    } finally {
-      this.isLoadingBackendData = false;
     }
   }
 
@@ -944,8 +1004,16 @@ class StorageEngine {
   }
 
   public unlinkParentAndAthlete(parentId: string, athleteId: string, actorName: string) {
+    const link = this.links.find((l) => l.parentId === parentId && l.athleteId === athleteId);
     this.links = this.links.filter((l) => !(l.parentId === parentId && l.athleteId === athleteId));
     this.saveAll();
+    if (link) {
+      this.markPendingDelete('links', link.id);
+      fetch(`/api/club/links/${link.id}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      }).catch((e) => console.warn('unlink API error:', e));
+    }
     this.addAuditLog('admin', actorName, 'حذف پیوند والد و فرزند', 'ParentLink', `${parentId}-${athleteId}`, 'قطع ارتباط والد و فرزند');
   }
 
@@ -1376,23 +1444,14 @@ class StorageEngine {
     this.markPendingUpsert('enrollments', newEnrollment);
     if (newTrx) this.markPendingUpsert('transactions', newTrx);
 
-    // Direct REST persistence (independent of full-state sync). The server
-    // re-validates capacity & duplicates atomically (SELECT ... FOR UPDATE).
-    fetch('/api/courses/enrollments', {
-      method: 'POST',
-      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        id: newEnrollment.id,
-        sessionId,
-        userId,
-        paymentMethod,
-      }),
-    }).then(async (res) => {
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        console.warn('[dbStore] Direct enrollment persist failed:', res.status, body?.error || '');
-      }
-    }).catch((e) => console.warn('Direct enrollment API error:', e));
+    // Direct REST persistence with offline-queue fallback.
+    // Server re-validates capacity & duplicates atomically (FOR UPDATE).
+    this.sendMutation('POST', '/api/courses/enrollments', {
+      id: newEnrollment.id,
+      sessionId,
+      userId,
+      paymentMethod,
+    });
 
     this.addAuditLog('secretary', actorName, 'ثبت‌نام ورزشکار در سانس', 'Enrollment', newEnrollment.id, `ثبت‌نام ${user.fullName} در ${session.title} (تاریخ شروع: ${customStart}، تاریخ پایان: ${customEnd})`);
 
@@ -1509,11 +1568,8 @@ class StorageEngine {
       this.saveAll();
       this.markPendingUpsert('enrollments', enr);
 
-      // Direct REST soft-cancel (independent of full-state sync)
-      fetch(`/api/courses/enrollments/${enrollmentId}`, {
-        method: 'DELETE',
-        headers: this.getAuthHeaders(),
-      }).catch((e) => console.warn('Direct enrollment cancel API error:', e));
+      // Direct REST soft-cancel with offline fallback
+      this.sendMutation('DELETE', `/api/courses/enrollments/${enrollmentId}`);
 
       this.addAuditLog('secretary', actorName, 'لغو ثبت‌نام سانس', 'Enrollment', enrollmentId, `لغو ثبت‌نام ${enr.athleteName} و پاکسازی خودکار بدهی‌ها و تراکنش‌های مالی معلق مربوطه`);
     }
@@ -1521,29 +1577,43 @@ class StorageEngine {
 
   public deleteEnrollment(enrollmentId: string, actorName: string) {
     const enr = this.enrollments.find((e) => e.id === enrollmentId);
-    if (enr) {
-      // 1. Cascade delete attendance records for this user in this specific session
-      this.attendanceRecords = this.attendanceRecords.filter(
-        (a) => !(a.userId === enr.userId && a.sessionId === enr.sessionId)
+    if (!enr) return;
+
+    // Collect related attendance ids BEFORE removal (for anti-resurrect merge)
+    const removedAttendanceIds = this.attendanceRecords
+      .filter((a) => a.userId === enr.userId && a.sessionId === enr.sessionId)
+      .map((a) => a.id);
+
+    // Cascade clear matching unpaid/pending debtor records and transactions
+    const session = this.sessions.find((s) => s.id === enr.sessionId);
+    const removedTxIds = new Set<string>();
+    if (session) {
+      this.debtors = this.debtors.filter(
+        (d) => !(d.userId === enr.userId && d.category === 'tuition' && (d.categoryTitle || '').includes(session.title || ''))
       );
-
-      // Cascade clear matching debtor records and transactions for this enrollment
-      const session = this.sessions.find((s) => s.id === enr.sessionId);
-      if (session) {
-        this.debtors = this.debtors.filter(
-          (d) => !(d.userId === enr.userId && d.category === 'tuition' && (d.categoryTitle || '').includes(session.title || ''))
-        );
-        this.transactions = this.transactions.filter(
-          (t) => !(t.userId === enr.userId && t.type === 'tuition' && (t.description || '').includes(session.title || ''))
-        );
-      }
-
-      // 2. Remove the enrollment record completely (database-standard cascading deletion)
-      this.enrollments = this.enrollments.filter((e) => e.id !== enrollmentId);
-      
-      this.saveAll();
-      this.addAuditLog('admin', actorName, 'حذف ثبت‌نام و پاکسازی سوابق', 'Enrollment', enrollmentId, `حذف فیزیکی ثبت‌نام ورزشکار ${enr.athleteName} و حذف آبشاری (Cascade Delete) تمامی سوابق حضور، غیاب، بدهی‌ها و تراکنش‌های مربوطه`);
+      this.transactions.forEach((t) => {
+        if (t.userId === enr.userId && t.type === 'tuition' && (t.description || '').includes(session.title || '')) {
+          removedTxIds.add(t.id);
+        }
+      });
+      this.transactions = this.transactions.filter((t) => !removedTxIds.has(t.id));
     }
+
+    // Remove the enrollment record completely
+    this.enrollments = this.enrollments.filter((e) => e.id !== enrollmentId);
+
+    this.saveAll();
+
+    // Anti-resurrect guards: the 5s poll must not bring these rows back
+    // before the server confirms deletion.
+    this.markPendingDelete('enrollments', enrollmentId);
+    removedAttendanceIds.forEach((id) => this.markPendingDelete('attendanceRecords', id));
+    removedTxIds.forEach((id) => this.markPendingDelete('transactions', id));
+
+    // Direct server-side HARD delete with cascade — offline-queue fallback.
+    this.sendMutation('DELETE', `/api/courses/enrollments/${enrollmentId}?mode=hard`);
+
+    this.addAuditLog('admin', actorName, 'حذف کامل ثبت‌نام', 'Enrollment', enrollmentId, `حذف ثبت‌نام ${enr.athleteName} همراه سوابق حضور و اقساط مرتبط`);
   }
 
   // PHASE 2: FINANCIAL TRANSACTIONS
@@ -1561,12 +1631,21 @@ class StorageEngine {
         }
       }
     });
+    // Soft-voided (cancelled) transactions are excluded from the default
+    // ledger — they remain archived in DB and via getVoidedTransactions().
     // Sort descending by creation timestamp extracted from ID
-    return [...this.transactions].sort((a, b) => {
-      const tsA = parseInt((a.id.match(/\d{13}/) || ['0'])[0], 10);
-      const tsB = parseInt((b.id.match(/\d{13}/) || ['0'])[0], 10);
-      return tsB - tsA;
-    });
+    return [...this.transactions]
+      .filter((t) => (t as any).status !== 'cancelled')
+      .sort((a, b) => {
+        const tsA = parseInt((a.id.match(/\d{13}/) || ['0'])[0], 10);
+        const tsB = parseInt((b.id.match(/\d{13}/) || ['0'])[0], 10);
+        return tsB - tsA;
+      });
+  }
+
+  /** Archive view: only the soft-voided financial records. */
+  public getVoidedTransactions(): FinancialTransaction[] {
+    return this.transactions.filter((t) => (t as any).status === 'cancelled');
   }
 
   public addTransaction(data: Omit<FinancialTransaction, 'id' | 'createdAt'> & { createdAt?: string }, actorName: string): FinancialTransaction {
@@ -1600,17 +1679,10 @@ class StorageEngine {
     this.saveAll();
     this.markPendingUpsert('transactions', newTrx);
 
-    // Direct REST persistence with Idempotency-Key (independent of full-state sync).
+    // Direct REST persistence with Idempotency-Key + offline fallback.
     // The key = transaction id, so a retry can never create a duplicate row.
-    fetch('/api/finance/transactions', {
-      method: 'POST',
-      headers: this.getAuthHeaders({ 'Content-Type': 'application/json', 'Idempotency-Key': newTrx.id }),
-      body: JSON.stringify({ ...newTrx, idempotencyKey: newTrx.id }),
-    }).then(async (res) => {
-      if (!res.ok && res.status !== 409) {
-        console.warn('[dbStore] Direct transaction persist failed:', res.status);
-      }
-    }).catch((e) => console.warn('Direct transaction API error:', e));
+    this.sendMutation('POST', '/api/finance/transactions',
+      { ...newTrx, idempotencyKey: newTrx.id });
 
     this.addAuditLog('accountant', actorName, 'ثبت تراکنش مالی', 'FinancialTransaction', newTrx.id, `ثبت مبلغ ${(newTrx.amount ?? 0).toLocaleString('fa-IR')} تومان برای ${newTrx.userName}`);
     return newTrx;
@@ -1618,7 +1690,8 @@ class StorageEngine {
 
   public updateTransactionStatus(id: string, status: 'completed' | 'pending' | 'rejected', actorName: string) {
     const trx = this.transactions.find((t) => t.id === id);
-    if (trx) {
+    // A voided transaction is frozen — its status can no longer change.
+    if (trx && (trx as any).status !== 'cancelled') {
       trx.status = status;
 
       if (trx.type === 'tuition') {
@@ -1807,32 +1880,28 @@ class StorageEngine {
       if (saved) this.markPendingUpsert('attendanceRecords', saved);
     });
 
-    // Direct REST batch persistence (atomic upsert on the server, independent of sync)
-    fetch('/api/courses/attendance/batch', {
-      method: 'POST',
-      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        sessionId,
-        date,
-        records: records.map((rec) => {
-          // Send the existing local record id so server-side upsert UPDATES
-          // instead of inserting a duplicate row on repeated saves/retries.
-          const existing = this.attendanceRecords.find(
-            (a) => a.sessionId === sessionId && a.date === date && a.userId === rec.userId
-          );
-          return {
-            id: existing?.id,
-            userId: rec.userId,
-            userName: rec.userName,
-            status: rec.status,
-            reason: rec.reason,
-            checkInTime: rec.checkInTime,
-            checkOutTime: rec.checkOutTime,
-            recordedAt: nowJalali,
-          };
-        }),
+    // Direct REST batch persistence (atomic upsert) with offline fallback.
+    this.sendMutation('POST', '/api/courses/attendance/batch', {
+      sessionId,
+      date,
+      records: records.map((rec) => {
+        // Send the existing local record id so server-side upsert UPDATES
+        // instead of inserting a duplicate row on repeated saves/retries.
+        const existing = this.attendanceRecords.find(
+          (a) => a.sessionId === sessionId && a.date === date && a.userId === rec.userId
+        );
+        return {
+          id: existing?.id,
+          userId: rec.userId,
+          userName: rec.userName,
+          status: rec.status,
+          reason: rec.reason,
+          checkInTime: rec.checkInTime,
+          checkOutTime: rec.checkOutTime,
+          recordedAt: nowJalali,
+        };
       }),
-    }).catch((e) => console.warn('Direct attendance API error:', e));
+    });
 
     this.addAuditLog('coach', actorName, 'ثبت حضور و غیاب', 'Attendance', sessionId, `ثبت حضور غیاب تاریخ ${date} برای ${records.length} ورزشکار`);
     return this.getAttendanceRecords(sessionId, date);
@@ -1866,6 +1935,7 @@ class StorageEngine {
       this.attendanceRecords = this.attendanceRecords.filter((a) => a.id !== recordId);
       this.checkAndExpireEnrollments();
       this.saveAll();
+      this.markPendingDelete('attendanceRecords', recordId);
       this.addAuditLog('coach', actorName, 'حذف رکورد حضور و غیاب', 'Attendance', recordId, `حذف رکورد تاریخ ${rec.date} برای ${rec.userName}`);
 
       // Also trigger direct server deletion
@@ -2191,6 +2261,11 @@ class StorageEngine {
     if (req) {
       this.insuranceRequests = this.insuranceRequests.filter((r) => r.id !== id);
       this.saveAll();
+      this.markPendingDelete('insuranceRequests', id);
+      fetch(`/api/club/insurance/${id}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      }).catch((e) => console.warn('insurance delete API error:', e));
       this.addAuditLog('secretary', actorName, 'حذف بیمه‌نامه ورزشی', 'InsuranceRequest', id, `حذف پرونده بیمه شماره ${req.insuranceNumber}`);
       return true;
     }
@@ -2391,6 +2466,11 @@ class StorageEngine {
     if (idx !== -1) {
       const removed = this.announcements.splice(idx, 1)[0];
       this.saveAll();
+      this.markPendingDelete('announcements', id);
+      fetch(`/api/club/announcements/${id}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      }).catch((e) => console.warn('announcement delete API error:', e));
       this.addAuditLog('admin', actorName, 'حذف اسلایدر/اعلان', 'ClubAnnouncement', id, `حذف اسلایدر ${removed.title}`);
     }
   }
@@ -2539,10 +2619,13 @@ class StorageEngine {
     if (readNotifs.length === 0) return;
 
     const deletedIds = this.getLocalDeletedNotifIds(userId);
+    const dbOwnedIds: string[] = [];
 
     for (const n of readNotifs) {
       if (n.userId === userId) {
         this.notifications = this.notifications.filter(item => item.id !== n.id);
+        dbOwnedIds.push(n.id); // owned row → physically removable on server
+        this.markPendingDelete('notifications', n.id);
       } else {
         if (!deletedIds.includes(n.id)) {
           deletedIds.push(n.id);
@@ -2551,6 +2634,14 @@ class StorageEngine {
     }
     this.saveLocalDeletedNotifIds(userId, deletedIds);
     this.saveAll();
+
+    if (dbOwnedIds.length > 0) {
+      fetch('/api/club/notifications/delete-read', {
+        method: 'POST',
+        headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ userId, ids: dbOwnedIds }),
+      }).catch((e) => console.warn('delete-read notifications API error:', e));
+    }
   }
 
   public addNotification(data: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'>): AppNotification {
@@ -3163,11 +3254,22 @@ class StorageEngine {
   public deleteSmsLog(id: string): void {
     this.smsLogs = this.smsLogs.filter((l) => l.id !== id);
     this.saveAll();
+    this.markPendingDelete('smsLogs', id);
+    fetch(`/api/club/smslogs/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    }).catch((e) => console.warn('smslog delete API error:', e));
   }
 
   public clearSmsLogs(): void {
+    const ids = this.smsLogs.map((l) => l.id);
     this.smsLogs = [];
     this.saveAll();
+    ids.forEach((id) => this.markPendingDelete('smsLogs', id));
+    fetch('/api/club/smslogs/all', {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    }).catch((e) => console.warn('smslog clear API error:', e));
   }
 
   public async checkSmsCredit(apiKey?: string): Promise<{ success: boolean; credit?: number; message?: string; error?: string }> {
