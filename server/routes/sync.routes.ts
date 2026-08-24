@@ -18,35 +18,27 @@ router.post('/sync', authenticateJwt, async (req, res) => {
 
   try {
     const pool = getMySqlPool();
-    const conn = await pool.getConnection();
-    try {
-      await conn.query('SET FOREIGN_KEY_CHECKS=0');
-
-      if (data.roles) await SyncRepository.syncRoles(conn, data.roles).catch(e => console.warn('[Sync roles warning]', e.message));
-      if (data.users) await SyncRepository.syncUsers(conn, data.users, convertBase64ToLocalFile).catch(e => console.warn('[Sync users warning]', e.message));
-      if (data.links) await SyncRepository.syncLinks(conn, data.links).catch(e => console.warn('[Sync links warning]', e.message));
-      if (data.preRegistrations) await SyncRepository.syncPreRegistrations(conn, data.preRegistrations, convertBase64ToLocalFile).catch(e => console.warn('[Sync prereg warning]', e.message));
-      if (data.clubSettings) await SyncRepository.syncClubSettings(conn, data.clubSettings).catch(e => console.warn('[Sync clubSettings warning]', e.message));
-      if (data.announcements) await SyncRepository.syncAnnouncements(conn, data.announcements).catch(e => console.warn('[Sync announcements warning]', e.message));
-      if (data.sessions || data.courses) await SyncRepository.syncCourses(conn, data.sessions || data.courses).catch(e => console.warn('[Sync courses warning]', e.message));
-      if (data.enrollments) await SyncRepository.syncEnrollments(conn, data.enrollments, convertBase64ToLocalFile).catch(e => console.warn('[Sync enrollments warning]', e.message));
-      if (data.transactions) await SyncRepository.syncTransactions(conn, data.transactions, convertBase64ToLocalFile).catch(e => console.warn('[Sync transactions warning]', e.message));
-      if (data.attendanceRecords) await SyncRepository.syncAttendanceRecords(conn, data.attendanceRecords).catch(e => console.warn('[Sync attendance warning]', e.message));
-      if (data.debtors) await SyncRepository.syncDebtors(conn, data.debtors).catch(e => console.warn('[Sync debtors warning]', e.message));
-      if (data.creditors) await SyncRepository.syncCreditors(conn, data.creditors).catch(e => console.warn('[Sync creditors warning]', e.message));
-      if (data.insuranceRequests) await SyncRepository.syncInsuranceRequests(conn, data.insuranceRequests, convertBase64ToLocalFile).catch(e => console.warn('[Sync insurance warning]', e.message));
-      if (data.supportTickets) await SyncRepository.syncSupportTickets(conn, data.supportTickets).catch(e => console.warn('[Sync tickets warning]', e.message));
-      if (data.notifications) await SyncRepository.syncNotifications(conn, data.notifications).catch(e => console.warn('[Sync notifications warning]', e.message));
-      if (data.products) await SyncRepository.syncProducts(conn, data.products, convertBase64ToLocalFile).catch(e => console.warn('[Sync products warning]', e.message));
-      if (data.shopInvoices) await SyncRepository.syncShopInvoices(conn, data.shopInvoices).catch(e => console.warn('[Sync invoices warning]', e.message));
-      if (data.smsLogs) await SyncRepository.syncSmsLogs(conn, data.smsLogs).catch(e => console.warn('[Sync sms warning]', e.message));
-      if (data.auditLogs) await SyncRepository.syncAuditLogs(conn, data.auditLogs).catch(e => console.warn('[Sync audit warning]', e.message));
-    } finally {
-      try {
-        await conn.query('SET FOREIGN_KEY_CHECKS=1');
-      } catch {}
-      conn.release();
-    }
+    await withTransaction(pool, async (conn) => {
+      if (data.roles) await SyncRepository.syncRoles(conn, data.roles);
+      if (data.users) await SyncRepository.syncUsers(conn, data.users, convertBase64ToLocalFile);
+      if (data.links) await SyncRepository.syncLinks(conn, data.links);
+      if (data.preRegistrations) await SyncRepository.syncPreRegistrations(conn, data.preRegistrations, convertBase64ToLocalFile);
+      if (data.clubSettings) await SyncRepository.syncClubSettings(conn, data.clubSettings);
+      if (data.announcements) await SyncRepository.syncAnnouncements(conn, data.announcements);
+      if (data.sessions || data.courses) await SyncRepository.syncCourses(conn, data.sessions || data.courses);
+      if (data.enrollments) await SyncRepository.syncEnrollments(conn, data.enrollments, convertBase64ToLocalFile);
+      if (data.transactions) await SyncRepository.syncTransactions(conn, data.transactions, convertBase64ToLocalFile);
+      if (data.attendanceRecords) await SyncRepository.syncAttendanceRecords(conn, data.attendanceRecords);
+      if (data.debtors) await SyncRepository.syncDebtors(conn, data.debtors);
+      if (data.creditors) await SyncRepository.syncCreditors(conn, data.creditors);
+      if (data.insuranceRequests) await SyncRepository.syncInsuranceRequests(conn, data.insuranceRequests, convertBase64ToLocalFile);
+      if (data.supportTickets) await SyncRepository.syncSupportTickets(conn, data.supportTickets);
+      if (data.notifications) await SyncRepository.syncNotifications(conn, data.notifications);
+      if (data.products) await SyncRepository.syncProducts(conn, data.products, convertBase64ToLocalFile);
+      if (data.shopInvoices) await SyncRepository.syncShopInvoices(conn, data.shopInvoices);
+      if (data.smsLogs) await SyncRepository.syncSmsLogs(conn, data.smsLogs);
+      if (data.auditLogs) await SyncRepository.syncAuditLogs(conn, data.auditLogs);
+    });
 
     return res.json({
       success: true,
@@ -55,10 +47,10 @@ router.post('/sync', authenticateJwt, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Sync MySQL Error]', err.message || err);
-    return res.status(503).json({
+    return res.status(500).json({
       success: false,
       dbConnected: false,
-      error: 'همگام‌سازی با MySQL ناموفق بود؛ تغییرات ذخیره نمی‌شوند. لطفاً اتصال دیتابیس را بررسی کنید.',
+      error: 'همگام‌سازی با MySQL ناموفق بود؛ هیچ تغییری ذخیره نشد (Rollback کامل). لطفاً خطا را بررسی کنید.',
     });
   }
 });
@@ -459,6 +451,49 @@ router.get('/full-data', optionalJwt, async (req, res) => {
       shopInvoices: parsedInvoices,
       smsLogs: parsedSmsLogs,
     };
+
+    const isPrivileged =
+      !!req.user &&
+      (req.user.roles || []).some((r) =>
+        ['super_admin', 'admin', 'secretary', 'accountant', 'coach'].includes(r)
+      );
+
+    // PII minimization (Phase 5): never send sensitive data to non-privileged clients.
+    const SENSITIVE = [
+      'nationalId', 'phone', 'emergencyContactName', 'emergencyContactPhone', 'address',
+      'medicalConditions', 'insuranceNumber', 'insuranceExpiryDate', 'baleChatId',
+      'discountPercent', 'debtAmount', 'creditAmount', 'allowCreditPurchase',
+    ];
+
+    if (!isPrivileged) {
+      const stripSensitive = (row: any) => {
+        const out: any = { ...row };
+        SENSITIVE.forEach((f) => { delete out[f]; });
+        return out;
+      };
+
+      if (req.user) {
+        const myId = (req.user as any).id;
+        responseData.users = ((responseData.users as any[]) || []).map((u: any) =>
+          u && u.id === myId ? u : stripSensitive(u)
+        );
+        responseData.preRegistrations = ((responseData.preRegistrations as any[]) || []).map(stripSensitive);
+        responseData.transactions = ((responseData.transactions as any[]) || []).filter((t: any) => t.userId === myId);
+        responseData.insuranceRequests = ((responseData.insuranceRequests as any[]) || []).filter((i: any) => i.userId === myId);
+        responseData.shopInvoices = ((responseData.shopInvoices as any[]) || []).filter((i: any) => i.athleteId === myId);
+        responseData.debtors = ((responseData.debtors as any[]) || []).filter((d: any) => d.userId === myId);
+        responseData.creditors = [];
+      } else {
+        // Fully anonymous visitor (pre-login public pages): strip all users' PII & financial data
+        responseData.users = ((responseData.users as any[]) || []).map(stripSensitive);
+        responseData.preRegistrations = ((responseData.preRegistrations as any[]) || []).map(stripSensitive);
+        responseData.transactions = [];
+        responseData.debtors = [];
+        responseData.creditors = [];
+        responseData.insuranceRequests = [];
+        responseData.shopInvoices = [];
+      }
+    }
 
     return res.json({
       success: true,

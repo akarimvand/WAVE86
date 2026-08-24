@@ -231,6 +231,86 @@ export class SyncRepository {
     await pool.query('DELETE FROM users WHERE id = ?', [id]);
   }
 
+  /**
+   * Optimistic locking update for a single user via direct REST (PUT/PATCH).
+   * Uses `version = version + 1 ... WHERE id = ? AND version = ?` to prevent
+   * lost updates when two clients edit the same row concurrently.
+   * Returns the number of affected rows: 0 => stale version (HTTP 409).
+   */
+  static async updateUserVersioned(
+    pool: mysql.Pool | mysql.PoolConnection,
+    u: any,
+    expectedVersion: number
+  ): Promise<number> {
+    const pwd = u.password ? (u.password.startsWith('$2a$') || u.password.startsWith('$2b$') ? u.password : await hashPassword(u.password)) : '';
+    const updatedAt = u.updatedAt || new Date().toISOString();
+
+    let rolesJson = '["athlete"]';
+    if (Array.isArray(u.roles)) {
+      rolesJson = JSON.stringify(u.roles);
+    } else if (typeof u.roles === 'string') {
+      try {
+        const parsed = JSON.parse(u.roles);
+        rolesJson = JSON.stringify(Array.isArray(parsed) ? parsed : [u.roles]);
+      } catch {
+        rolesJson = JSON.stringify(u.roles.includes(',') ? u.roles.split(',').map((s: string) => s.trim()) : [u.roles]);
+      }
+    }
+
+    const [result]: any = await pool.query(
+      `UPDATE users SET
+        username=?, password=?, firstName=?, lastName=?, fullName=?, fatherName=?, shenasnamehNo=?, nationalId=?,
+        birthDate=?, gender=?, phone=?, emergencyContactName=?, emergencyContactRelation=?, emergencyContactPhone=?,
+        bloodType=?, shoeSize=?, clothingSize=?, address=?, medicalConditions=?, referrerName=?, referrerPhone=?,
+        educationOrJob=?, climbingExperienceLevel=?, roles=?, activeRole=?, isActive=?, insuranceNumber=?,
+        insuranceExpiryDate=?, isInsuranceValid=?, baleChatId=?, avatarUrl=?, updatedAt=?, version = version + 1
+       WHERE id = ? AND version = ?`,
+      [
+        u.username || u.nationalId || u.id,
+        pwd,
+        u.firstName || '',
+        u.lastName || '',
+        u.fullName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'کاربر',
+        u.fatherName || '',
+        u.shenasnamehNo || '',
+        u.nationalId || '',
+        u.birthDate || '',
+        u.gender || '',
+        u.phone || '',
+        u.emergencyContactName || '',
+        u.emergencyContactRelation || '',
+        u.emergencyContactPhone || '',
+        u.bloodType || '',
+        u.shoeSize || '',
+        u.clothingSize || '',
+        u.address || '',
+        u.medicalConditions || '',
+        u.referrerName || '',
+        u.referrerPhone || '',
+        u.educationOrJob || '',
+        u.climbingExperienceLevel || '',
+        rolesJson,
+        u.activeRole || (Array.isArray(u.roles) && u.roles[0]) || 'athlete',
+        u.isActive !== false ? 1 : 0,
+        u.insuranceNumber || '',
+        u.insuranceExpiryDate || '',
+        u.isInsuranceValid ? 1 : 0,
+        u.baleChatId || '',
+        u.avatarUrl || '',
+        updatedAt,
+        u.id,
+        expectedVersion,
+      ]
+    );
+
+    return result?.affectedRows || 0;
+  }
+
+  static async userExists(pool: mysql.Pool | mysql.PoolConnection, id: string): Promise<boolean> {
+    const [rows]: any = await pool.query('SELECT id FROM users WHERE id = ?', [id]);
+    return Array.isArray(rows) && rows.length > 0;
+  }
+
   // ==========================================
   // ROLES
   // ==========================================

@@ -3,7 +3,21 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'moj-climbing-super-secret-key-2026';
+// JWT Secret: MUST be provided via environment in production.
+// If missing, an ephemeral random secret is used (invalidates sessions on restart) with a loud warning.
+// Never fall back to a hardcoded fixed secret.
+export const JWT_SECRET: string = (() => {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret && envSecret.length >= 16) {
+    return envSecret;
+  }
+  if (envSecret && envSecret.length > 0) {
+    console.warn('[Security] JWT_SECRET is set but shorter than 16 characters. Using an ephemeral random secret instead.');
+  } else {
+    console.warn('[Security] JWT_SECRET environment variable is NOT set. Using an ephemeral random secret — sessions will NOT survive restarts. Set JWT_SECRET in production!');
+  }
+  return require('crypto').randomBytes(48).toString('hex');
+})();
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 export const ALLOWED_MIME_TYPES = [
   'image/jpeg',

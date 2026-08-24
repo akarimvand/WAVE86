@@ -27,9 +27,9 @@ export function loadSavedConfig(): DbConfig {
           return {
             host: data.host,
             port: Number(data.port) || 3306,
-            user: data.user || 'oytblnmz_hassan',
-            password: data.password || 'Hassan@1367',
-            database: data.database || 'oytblnmz_mouj',
+            user: data.user || process.env.DB_USER || '',
+            password: data.password || process.env.DB_PASSWORD || '',
+            database: data.database || process.env.DB_NAME || '',
           };
         }
       }
@@ -38,13 +38,13 @@ export function loadSavedConfig(): DbConfig {
     console.error('[Config] Error reading config.json:', err);
   }
 
-  // Fallback to environment variables or defaults
+  // Fallback to environment variables or empty defaults (never hardcode credentials)
   return {
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || 'oytblnmz_hassan',
-    password: process.env.DB_PASSWORD || 'Hassan@1367',
-    database: process.env.DB_NAME || 'oytblnmz_mouj',
+    user: process.env.DB_USER || '',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || '',
   };
 }
 
@@ -862,6 +862,9 @@ export async function seedInitialAdmin(pool: mysql.Pool) {
   `);
 
   // 2. Base Admin User ONLY (No demo fake athletes or courses)
+  // Password is stored ONLY as a bcrypt hash (never plaintext).
+  // NOTE: The default password below is a bootstrap-only value; it MUST be changed on first login.
+  const adminHash = await hashPassword('123');
   await pool.query(
     `INSERT INTO users (id, username, password, fullName, nationalId, phone, roles, activeRole, isActive, createdAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
@@ -869,7 +872,7 @@ export async function seedInitialAdmin(pool: mysql.Pool) {
     [
       'usr-admin-1',
       'admin',
-      '123',
+      adminHash,
       'مدیر کل مجموعه',
       '0012345678',
       '09121111111',

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getMySqlPool, withTransaction } from '../db';
 import { SyncRepository } from '../repository';
-import { authenticateJwt, optionalJwt, requireRoles, validateRequestBody } from '../middleware';
+import { authenticateJwt, requireRoles, validateRequestBody } from '../middleware';
 
 const router = Router();
 

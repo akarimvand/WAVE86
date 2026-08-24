@@ -4,6 +4,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { getMySqlPool } from './server/db';
 import { ensureAllTablesExist } from './server/mysql';
+import { runMigrations } from './server/migrations';
 import { configureSecurityMiddlewares, errorHandler } from './server/middleware';
 
 // Route modules
@@ -100,6 +101,8 @@ async function startServer() {
       const pool = getMySqlPool();
       await ensureAllTablesExist(pool);
       console.log('[Server] MySQL schema checked and verified successfully.');
+      const migrationResult = await runMigrations(pool);
+      console.log(`[Server] Migrations applied=${migrationResult.applied.length} skipped=${migrationResult.skipped.length}`);
     } catch (e: any) {
       console.warn('[Server] MySQL initial connection warning:', e.message || e);
     }

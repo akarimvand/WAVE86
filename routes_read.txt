@@ -111,31 +111,10 @@ router.put('/:id', authenticateJwt, async (req: AuthenticatedRequest, res, next)
       u.password = await hashPassword(u.password);
     }
 
-    // Update MySQL database only (single source of truth) with Optimistic Locking
+    // Update MySQL database only (single source of truth)
     const pool = getMySqlPool();
-    const expectedVersion = Number(u.version);
-    if (Number.isInteger(expectedVersion) && expectedVersion > 0) {
-      const affected = await SyncRepository.updateUserVersioned(pool, u, expectedVersion);
-      if (affected === 0) {
-        const exists = await SyncRepository.userExists(pool, targetId);
-        if (!exists) {
-          return res.status(404).json({ success: false, error: 'کاربر یافت نشد.' });
-        }
-        return res.status(409).json({
-          success: false,
-          conflict: true,
-          error: 'این اطلاعات توسط کاربر دیگری تغییر کرده است. ابتدا اطلاعات جدید را دریافت کنید.',
-        });
-      }
-      return res.json({
-        success: true,
-        message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.',
-        user: { ...u, version: expectedVersion + 1 },
-      });
-    }
-
-    // Fallback when no version provided (legacy clients / bulk flows)
     await SyncRepository.saveUser(pool, u);
+
     res.json({ success: true, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.', user: u });
   } catch (err: any) {
     res.status(500).json({
@@ -169,31 +148,10 @@ router.patch('/:id', authenticateJwt, async (req: AuthenticatedRequest, res, nex
       u.password = await hashPassword(u.password);
     }
 
-    // Update MySQL database only (single source of truth) with Optimistic Locking
+    // Update MySQL database only (single source of truth)
     const pool = getMySqlPool();
-    const expectedVersion = Number(u.version);
-    if (Number.isInteger(expectedVersion) && expectedVersion > 0) {
-      const affected = await SyncRepository.updateUserVersioned(pool, u, expectedVersion);
-      if (affected === 0) {
-        const exists = await SyncRepository.userExists(pool, targetId);
-        if (!exists) {
-          return res.status(404).json({ success: false, error: 'کاربر یافت نشد.' });
-        }
-        return res.status(409).json({
-          success: false,
-          conflict: true,
-          error: 'این اطلاعات توسط کاربر دیگری تغییر کرده است. ابتدا اطلاعات جدید را دریافت کنید.',
-        });
-      }
-      return res.json({
-        success: true,
-        message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.',
-        user: { ...u, version: expectedVersion + 1 },
-      });
-    }
-
-    // Fallback when no version provided (legacy clients / bulk flows)
     await SyncRepository.saveUser(pool, u);
+
     res.json({ success: true, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.', user: u });
   } catch (err: any) {
     res.status(500).json({

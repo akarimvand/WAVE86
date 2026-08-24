@@ -282,6 +282,10 @@ class StorageEngine {
           if (res.ok) {
             const json = await res.json();
             this.setDbConnected(json.dbConnected === true);
+            if (json.success === true && json.dbConnected === true) {
+              // Server committed the batch — clear locally-pending mutations
+              this.clearPendingMutations();
+            }
           } else {
             this.setDbConnected(false);
           }
@@ -295,6 +299,67 @@ class StorageEngine {
   }
 
   private isLoadingBackendData = false;
+
+  /**
+   * Pending local mutations that have not yet been confirmed by the server.
+   * Prevents the background refresh (5s poll / focus / full-data reload) from
+   * overwriting optimistic UI changes before the backend has persisted them.
+   * Key: `${entity}|${id}` → { kind: 'upsert' | 'delete', item }
+   */
+  private pendingLocalMutations: Map<string, { kind: 'upsert' | 'delete'; item: any }> = new Map();
+
+  private markPendingUpsert(entity: string, item: any) {
+    if (!item || !item.id) return;
+    this.pendingLocalMutations.set(`${entity}|${item.id}`, { kind: 'upsert', item });
+  }
+
+  private markPendingDelete(entity: string, id: string) {
+    if (!id) return;
+    this.pendingLocalMutations.set(`${entity}|${id}`, { kind: 'delete', item: null });
+  }
+
+  private mergePendingLocal(entity: string, serverItems: any[]): any[] {
+    const merged = [...serverItems];
+    this.pendingLocalMutations.forEach((m, key) => {
+      const sep = key.indexOf('|');
+      if (sep === -1) return;
+      const ent = key.substring(0, sep);
+      const id = key.substring(sep + 1);
+      if (ent !== entity || !id) return;
+      if (m.kind === 'delete') {
+        const idx = merged.findIndex((i) => i && i.id === id);
+        if (idx >= 0) merged.splice(idx, 1);
+      } else {
+        const idx = merged.findIndex((i) => i && i.id === id);
+        if (idx >= 0) merged[idx] = m.item;
+        else merged.unshift(m.item);
+      }
+    });
+    return merged;
+  }
+
+  private clearPendingMutations() {
+    this.pendingLocalMutations.clear();
+  }
+
+  /**
+   * Guard against double-click / duplicate submit of financial actions.
+   * Keyed by user; blocks rapid re-submission within a short window so a
+   * fast double-click cannot create two identical payments.
+   */
+  private lastFinancialActionAt: Map<string, number> = new Map();
+
+  private canSubmitFinancialAction(userKey: string): boolean {
+    if (!userKey) return true;
+    const now = Date.now();
+    const last = this.lastFinancialActionAt.get(userKey) || 0;
+    if (now - last < 1500) {
+      console.warn('[dbStore] Blocked duplicate financial action for', userKey);
+      return false;
+    }
+    this.lastFinancialActionAt.set(userKey, now);
+    return true;
+  }
 
   public async loadFromBackendMySql(): Promise<boolean> {
     if (this.isLoadingBackendData) {
@@ -325,14 +390,13 @@ class StorageEngine {
       }
 
       if (!res.ok) {
+        // DB/network error ≠ empty database: keep current data, mark offline (Phase 4)
         this.setDbConnected(false);
-        this.clearInMemoryData();
         return false;
       }
       const json = await res.json();
       if (!json || !json.data) {
         this.setDbConnected(false);
-        this.clearInMemoryData();
         return false;
       }
 
@@ -341,7 +405,6 @@ class StorageEngine {
       this.setDbConnected(isDbConnected);
 
       if (!isDbConnected) {
-        this.clearInMemoryData();
         return false;
       }
 
@@ -353,25 +416,28 @@ class StorageEngine {
       }
 
       if (Array.isArray(d.users)) {
-        this.users = d.users.map((u: any) => {
-          let r = u.roles;
-          if (typeof r === 'string') {
-            try {
-              r = JSON.parse(r);
-              if (typeof r === 'string') r = JSON.parse(r);
-            } catch {
-              r = ['athlete'];
+        this.users = this.mergePendingLocal(
+          'users',
+          d.users.map((u: any) => {
+            let r = u.roles;
+            if (typeof r === 'string') {
+              try {
+                r = JSON.parse(r);
+                if (typeof r === 'string') r = JSON.parse(r);
+              } catch {
+                r = ['athlete'];
+              }
             }
-          }
-          return {
-            ...u,
-            roles: Array.isArray(r) ? r.filter(Boolean) : ['athlete'],
-          };
-        });
+            return {
+              ...u,
+              roles: Array.isArray(r) ? r.filter(Boolean) : ['athlete'],
+            };
+          })
+        );
       }
 
-      if (Array.isArray(d.links)) this.links = d.links;
-      if (Array.isArray(d.preRegistrations)) this.preRegistrations = d.preRegistrations;
+      if (Array.isArray(d.links)) this.links = this.mergePendingLocal('links', d.links);
+      if (Array.isArray(d.preRegistrations)) this.preRegistrations = this.mergePendingLocal('preRegistrations', d.preRegistrations);
       if (Array.isArray(d.auditLogs)) this.auditLogs = d.auditLogs;
       if (d.clubSettings && Object.keys(d.clubSettings).length > 0) {
         this.clubSettings = { ...this.clubSettings, ...d.clubSettings };
@@ -380,17 +446,17 @@ class StorageEngine {
         }
       }
       if (Array.isArray(d.announcements)) this.announcements = d.announcements;
-      if (Array.isArray(d.sessions)) this.sessions = d.sessions;
-      if (Array.isArray(d.enrollments)) this.enrollments = d.enrollments;
-      if (Array.isArray(d.transactions)) this.transactions = d.transactions;
-      if (Array.isArray(d.attendanceRecords)) this.attendanceRecords = d.attendanceRecords;
-      if (Array.isArray(d.debtors)) this.debtors = d.debtors;
-      if (Array.isArray(d.creditors)) this.creditors = d.creditors;
-      if (Array.isArray(d.insuranceRequests)) this.insuranceRequests = d.insuranceRequests;
-      if (Array.isArray(d.supportTickets)) this.supportTickets = d.supportTickets;
-      if (Array.isArray(d.notifications)) this.notifications = d.notifications;
+      if (Array.isArray(d.sessions)) this.sessions = this.mergePendingLocal('sessions', d.sessions);
+      if (Array.isArray(d.enrollments)) this.enrollments = this.mergePendingLocal('enrollments', d.enrollments);
+      if (Array.isArray(d.transactions)) this.transactions = this.mergePendingLocal('transactions', d.transactions);
+      if (Array.isArray(d.attendanceRecords)) this.attendanceRecords = this.mergePendingLocal('attendanceRecords', d.attendanceRecords);
+      if (Array.isArray(d.debtors)) this.debtors = this.mergePendingLocal('debtors', d.debtors);
+      if (Array.isArray(d.creditors)) this.creditors = this.mergePendingLocal('creditors', d.creditors);
+      if (Array.isArray(d.insuranceRequests)) this.insuranceRequests = this.mergePendingLocal('insuranceRequests', d.insuranceRequests);
+      if (Array.isArray(d.supportTickets)) this.supportTickets = this.mergePendingLocal('supportTickets', d.supportTickets);
+      if (Array.isArray(d.notifications)) this.notifications = this.mergePendingLocal('notifications', d.notifications);
       if (Array.isArray(d.products)) {
-        this.products = d.products;
+        this.products = this.mergePendingLocal('products', d.products);
       }
 
       // Fallback: ONLY fetch /api/products if products array is still empty after full-data
@@ -409,23 +475,26 @@ class StorageEngine {
       }
 
       if (Array.isArray(d.shopInvoices)) {
-        this.shopInvoices = d.shopInvoices.map((inv: any) => {
-          let parsedItems = inv.items;
-          if (typeof parsedItems === 'string') {
-            try {
-              parsedItems = JSON.parse(parsedItems);
-              if (typeof parsedItems === 'string') {
+        this.shopInvoices = this.mergePendingLocal(
+          'shopInvoices',
+          d.shopInvoices.map((inv: any) => {
+            let parsedItems = inv.items;
+            if (typeof parsedItems === 'string') {
+              try {
                 parsedItems = JSON.parse(parsedItems);
+                if (typeof parsedItems === 'string') {
+                  parsedItems = JSON.parse(parsedItems);
+                }
+              } catch {
+                parsedItems = [];
               }
-            } catch {
-              parsedItems = [];
             }
-          }
-          return {
-            ...inv,
-            items: Array.isArray(parsedItems) ? parsedItems : [],
-          };
-        });
+            return {
+              ...inv,
+              items: Array.isArray(parsedItems) ? parsedItems : [],
+            };
+          })
+        );
       }
 
       if (Array.isArray(d.smsLogs)) {
@@ -446,8 +515,8 @@ class StorageEngine {
       if (err?.name !== 'AbortError') {
         console.warn('[dbStore] Failed to load backend data:', err);
       }
+      // Keep current in-memory data on error; only mark offline (Phase 4)
       this.setDbConnected(false);
-      this.clearInMemoryData();
       return false;
     } finally {
       this.isLoadingBackendData = false;
@@ -650,12 +719,23 @@ class StorageEngine {
       });
       this.saveAll();
       this.addAuditLog('admin', actorName, 'ویرایش پرونده کاربر', 'User', userId, `بروزرسانی اطلاعات ${user.fullName}`);
+      this.markPendingUpsert('users', user);
       
-      // Direct REST API sync for instant single-record persistence
+      // Direct REST API sync for instant single-record persistence (with Optimistic Locking)
       fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(user),
+      }).then(async (res) => {
+        if (res.ok) {
+          const body = await res.json().catch(() => null);
+          if (body?.user?.version) {
+            user.version = body.user.version;
+          }
+        } else if (res.status === 409) {
+          // Conflict: another client changed this record. Refresh authoritative data.
+          this.loadFromBackendMySql();
+        }
       }).catch((e) => console.warn('Direct user update API error:', e));
 
       return user;
@@ -1461,6 +1541,13 @@ class StorageEngine {
   }
 
   public addTransaction(data: Omit<FinancialTransaction, 'id' | 'createdAt'> & { createdAt?: string }, actorName: string): FinancialTransaction {
+    const userKey = data.userId || data.userName || actorName || 'unknown';
+    if (!this.canSubmitFinancialAction(userKey)) {
+      const existing = this.transactions.find((t) => t.userId === userKey);
+      if (existing) return existing;
+      throw new Error('عملیات مالی تکراری ثبت نشد؛ کمی صبر کنید و دوباره تلاش کنید.');
+    }
+
     const newTrx: FinancialTransaction = {
       ...data,
       id: `trx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -1468,6 +1555,7 @@ class StorageEngine {
       createdBy: actorName,
     };
     this.transactions.unshift(newTrx);
+    this.markPendingUpsert('transactions', newTrx);
 
     // Sync enrollment status if this transaction is completed tuition payment
     if (newTrx.type === 'tuition' && newTrx.status === 'completed') {
@@ -1600,15 +1688,25 @@ class StorageEngine {
 
   public deleteTransaction(id: string, actorName: string) {
     const trx = this.transactions.find((t) => t.id === id);
-    this.transactions = this.transactions.filter((t) => t.id !== id);
+    // Financial soft-void: mark as cancelled instead of removing the record,
+    // matching the server's soft-void behavior (audit trail preserved).
+    if (trx) {
+      (trx as any).status = 'cancelled';
+      (trx as any).voidedAt = new Date().toISOString();
+      (trx as any).voidedBy = actorName;
+      (trx as any).voidReason = `باطل‌سازی توسط ${actorName}`;
+    }
     this.saveAll();
-    this.addAuditLog('accountant', actorName, 'حذف تراکنش مالی', 'FinancialTransaction', id, `حذف تراکنش ${trx?.userName || id} به مبلغ ${(trx?.amount ?? 0).toLocaleString('fa-IR')} تومان`);
+    if (trx) this.markPendingUpsert('transactions', trx);
+    else this.markPendingDelete('transactions', id);
+    this.addAuditLog('accountant', actorName, 'ابطال تراکنش مالی', 'FinancialTransaction', id, `ابطال تراکنش ${trx?.userName || id} به مبلغ ${(trx?.amount ?? 0).toLocaleString('fa-IR')} تومان`);
     
-    // Direct REST API deletion from MySQL
+    // Direct REST API soft-void from MySQL
     fetch(`/api/finance/transactions/${id}`, {
       method: 'DELETE',
-      headers: this.getAuthHeaders(),
-    }).catch((e) => console.warn('Direct transaction delete API error:', e));
+      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ voidReason: trx ? (trx as any).voidReason : '' }),
+    }).catch((e) => console.warn('Direct transaction void API error:', e));
   }
 
   // PHASE 2: ATTENDANCE
@@ -2496,13 +2594,23 @@ class StorageEngine {
     Object.assign(user, fieldsToUpdate);
 
     this.saveAll();
+    this.markPendingUpsert('users', user);
     this.addAuditLog('athlete', actorName || user.fullName, 'ویرایش اطلاعات پروفایل', 'User', user.id, `ویرایش اطلاعات کاربر ${user.fullName}`);
     
-    // Direct REST API sync
+    // Direct REST API sync (with Optimistic Locking)
     fetch(`/api/users/${userId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(user),
+    }).then(async (res) => {
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        if (body?.user?.version) {
+          user.version = body.user.version;
+        }
+      } else if (res.status === 409) {
+        this.loadFromBackendMySql();
+      }
     }).catch((e) => console.warn('Direct user update API error:', e));
 
     return user;
@@ -2528,6 +2636,7 @@ class StorageEngine {
     };
     this.products.unshift(newProd);
     this.saveAll();
+    this.markPendingUpsert('products', newProd);
 
     fetch('/api/products', {
       method: 'POST',
@@ -2550,6 +2659,7 @@ class StorageEngine {
       updatedAt: formatJalaliDate(getCurrentJalaliDate()),
     };
     this.saveAll();
+    this.markPendingUpsert('products', this.products[idx]);
 
     fetch(`/api/products/${id}`, {
       method: 'PUT',
@@ -2568,6 +2678,7 @@ class StorageEngine {
     this.products = this.products.filter((p) => p.id !== id);
     if (this.products.length !== initialLen) {
       this.saveAll();
+      this.markPendingDelete('products', id);
 
       fetch(`/api/products/${id}`, {
         method: 'DELETE',
@@ -2644,6 +2755,10 @@ class StorageEngine {
   }): { success: boolean; invoice?: ShopInvoice; error?: string } {
     if (!data.items || data.items.length === 0) {
       return { success: false, error: 'سبد خرید خالی است.' };
+    }
+    // Double-click guard: block duplicate rapid submissions for the same athlete.
+    if (!this.canSubmitFinancialAction(`invoice:${data.athleteId}`)) {
+      return { success: false, error: 'درخواست تکراری ثبت نشد؛ کمی صبر کنید و دوباره تلاش کنید.' };
     }
 
     const athlete = this.users.find((u) => u.id === data.athleteId);
