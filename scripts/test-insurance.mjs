@@ -30,7 +30,7 @@ async function api(method, url, body, token) {
   return { status: res.status, json };
 }
 
-const conn = await mysql.createConnection({ host: 'localhost', port: 3306, user: 'root', password: '', database: 'qdexnhxv_mouj' });
+const conn = await mysql.createConnection({ host: 'localhost', port: 3306, user: 'root', password: '', database: process.env.DB_NAME || 'oytblnmz_mouj' });
 const q = async (sql, p) => (await conn.query(sql, p))[0];
 
 console.log('========== SETUP ==========');

@@ -10,3 +10,8 @@ coverage/
 # Local runtime configuration containing DB credentials (never commit real secrets)
 config.json
 server_db_store.json
+
+# Sensitive data: DB dumps and automatic backups contain full PII + password hashes
+*.sql
+backups/
+uploads/

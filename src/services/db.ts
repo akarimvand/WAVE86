@@ -2223,6 +2223,9 @@ class StorageEngine {
     };
     this.insuranceRequests.unshift(newReq);
     this.saveAll();
+    // Protect against the 5s poll / refresh overwriting this optimistic
+    // insert before POST /api/mysql/sync has committed on the server.
+    this.markPendingUpsert('insuranceRequests', newReq);
     this.addAuditLog('athlete', actorName, 'ثبت و آپلود بیمه‌نامه ورزشی', 'InsuranceRequest', newReq.id, `ارسال کارت بیمه شماره ${newReq.insuranceNumber} برای بررسی`);
     
     // Add real-time inbox notification for administrative team
@@ -2253,6 +2256,7 @@ class StorageEngine {
       }
 
       this.saveAll();
+      this.markPendingUpsert('insuranceRequests', req);
       this.addAuditLog('secretary', reviewerName, 'تأیید بیمه‌نامه ورزشی', 'InsuranceRequest', id, `تأیید بیمه‌نامه ${req.insuranceNumber} متعلق به ${req.userName}`);
 
       // Send personal notification to athlete
@@ -2277,6 +2281,7 @@ class StorageEngine {
       req.reviewedAt = formatJalaliDate(getCurrentJalaliDate());
       req.reviewedBy = reviewerName;
       this.saveAll();
+      this.markPendingUpsert('insuranceRequests', req);
       this.addAuditLog('secretary', reviewerName, 'رد بیمه‌نامه ورزشی', 'InsuranceRequest', id, `رد بیمه‌نامه ${req.userName} علت: ${reason}`);
 
       // Send personal notification to athlete
@@ -2313,6 +2318,7 @@ class StorageEngine {
         }
       }
       this.saveAll();
+      this.markPendingUpsert('insuranceRequests', updated);
       this.addAuditLog('secretary', actorName, 'ویرایش بیمه‌نامه ورزشی', 'InsuranceRequest', id, `اصلاح اطلاعات بیمه‌نامه ${updated.insuranceNumber}`);
       return updated;
     }

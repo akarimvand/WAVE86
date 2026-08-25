@@ -621,7 +621,7 @@ export class SyncRepository {
       return [
         e.id,
         e.sessionId || '',
-        e.userId || '',
+        e.userId || null, // NULL (not '') so the users-FK is satisfied when unset
         e.athleteName || '',
         e.athletePhone || '',
         e.athleteNationalId || '',
@@ -663,7 +663,7 @@ export class SyncRepository {
 
       return [
         t.id,
-        t.userId || '',
+        t.userId || null, // NULL (not '') so the users-FK is satisfied when unset
         t.userName || '',
         t.userNationalId || '',
         t.amount ?? 0,
@@ -728,7 +728,7 @@ export class SyncRepository {
 
     const rows = debtors.map((d) => [
       d.id,
-      d.userId || '',
+      d.userId || null, // NULL (not '') so the users-FK is satisfied when unset
       d.fullName || '',
       d.nationalId || '',
       d.phone || '',
@@ -783,7 +783,7 @@ export class SyncRepository {
 
       return [
         ins.id,
-        ins.userId || '',
+        ins.userId || null, // NULL (not '') — fk_insurance_user rejects empty strings
         ins.userName || '',
         ins.userNationalId || '',
         ins.insuranceNumber || '',
@@ -837,7 +837,7 @@ export class SyncRepository {
 
     const rows = notifications.map((n) => [
       n.id,
-      n.userId || '',
+      n.userId || null, // NULL (not '') — fk_notifications_user rejects empty strings
       n.targetAudience || 'all',
       n.title || '',
       n.message || '',

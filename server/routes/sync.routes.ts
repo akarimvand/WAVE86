@@ -9,11 +9,60 @@ const router = Router();
 /**
  * POST /api/mysql/sync
  * Atomic batch synchronization from the frontend store into MySQL (single source of truth).
+ *
+ * SECURITY (P0 fix): previously ANY authenticated user could upsert the whole
+ * state including `roles`, other users' records, `auditLogs` and financial
+ * tables (privilege-escalation vector). Now the payload is filtered per role:
+ * staff roles sync everything; regular members may only sync THEIR OWN rows
+ * of member-scoped entities, and can never touch roles/audit/global settings
+ * or privileged user fields (password/roles/activeRole).
  */
+const STAFF_SYNC_ROLES = ['super_admin', 'admin', 'secretary', 'accountant', 'coach'];
+
+function sanitizeSyncPayloadForMember(data: any, userId?: string): any {
+  const safe = { ...data };
+  // Global/staff-only collections are never writable by members
+  const dropKeys = [
+    'roles', 'auditLogs', 'clubSettings', 'announcements', 'sessions', 'courses',
+    'products', 'smsLogs', 'debtors', 'creditors', 'shopInvoices', 'preRegistrations',
+    // Financial records are staff/accountant-managed (REST /api/finance has its
+    // own guard); letting members upsert them enables fabricated payments.
+    'transactions',
+  ];
+  dropKeys.forEach((k) => delete safe[k]);
+
+  // Member-scoped collections: keep only rows owned by the caller
+  const own = (arr: any[], key: string) =>
+    Array.isArray(arr) ? arr.filter((r) => r && r[key] === userId) : undefined;
+
+  safe.users = Array.isArray(data.users)
+    ? data.users
+        .filter((u: any) => u && u.id === userId)
+        .map((u: any) => {
+          // Privileged fields cannot be self-assigned
+          const { password, roles, activeRole, isActive, debtAmount, discountPercent, ...rest } = u;
+          return rest;
+        })
+    : undefined;
+  safe.links = own(data.links, 'parentId');
+  safe.insuranceRequests = own(data.insuranceRequests, 'userId');
+  safe.supportTickets = own(data.supportTickets, 'userId');
+  safe.notifications = own(data.notifications, 'userId');
+  safe.enrollments = own(data.enrollments, 'userId');
+  return safe;
+}
+
 router.post('/sync', authenticateJwt, async (req, res) => {
-  const data = req.body;
+  let data = req.body;
   if (!data || typeof data !== 'object') {
     return res.status(400).json({ success: false, error: 'داده‌های همگام‌سازی نامعتبر است.' });
+  }
+
+  const userRoles: string[] = (req as any).user?.roles || [];
+  const isActiveRoleStaff = STAFF_SYNC_ROLES.includes((req as any).user?.activeRole || '');
+  const isStaff = userRoles.some((r) => STAFF_SYNC_ROLES.includes(r)) || isActiveRoleStaff;
+  if (!isStaff) {
+    data = sanitizeSyncPayloadForMember(data, (req as any).user?.id);
   }
 
   try {
@@ -50,10 +99,13 @@ router.post('/sync', authenticateJwt, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Sync MySQL Error]', err.message || err);
+    // Include the driver error code/message so deployment issues (missing
+    // columns, FK violations on the host DB) are diagnosable from the client.
     return res.status(500).json({
       success: false,
       dbConnected: false,
       error: 'همگام‌سازی با MySQL ناموفق بود؛ هیچ تغییری ذخیره نشد (Rollback کامل). لطفاً خطا را بررسی کنید.',
+      detail: err.code ? `${err.code}: ${err.message}` : String(err.message || err),
     });
   }
 });
